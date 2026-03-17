@@ -377,6 +377,23 @@ class HammerNode: SKSpriteNode {
                        y: position.y + tipLocal.x * sinA + tipLocal.y * cosA)
     }
 
+    private func spawnFlash() {
+        guard let scene = self.parent?.scene ?? self.scene else { return }
+        let flash = SKSpriteNode(color: .white,
+                                  size: CGSize(width: scene.frame.width, height: scene.frame.height))
+        flash.position = CGPoint(x: scene.frame.midX, y: scene.frame.midY)
+        flash.zPosition = 999
+        flash.alpha = 0
+        scene.addChild(flash)
+        flash.run(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.3, duration: 0.02),
+            SKAction.fadeAlpha(to: 0.0, duration: 0.04),
+            SKAction.fadeAlpha(to: 0.2, duration: 0.02),
+            SKAction.fadeOut(withDuration: 0.05),
+            SKAction.removeFromParent()
+        ]))
+    }
+
     private func spawnStrikeEffect(big: Bool = false, customOrigin: CGPoint? = nil) {
         guard let parent = self.parent, let scene = parent.scene else { return }
 
@@ -499,7 +516,7 @@ class HammerNode: SKSpriteNode {
         ]), withKey: "comeback")
     }
 
-    /// Dyker upp efter flash, vinkar hejdå, studsar nyckfullt tillbaka till toolbox
+    /// Dyker upp med flash, knackar, vickar hejdå, loopar tillbaka till toolbox
     func waveBye(at center: CGPoint, toolboxPos: CGPoint, completion: @escaping () -> Void) {
         removeAllActions()
         position = center
@@ -508,64 +525,99 @@ class HammerNode: SKSpriteNode {
         alpha = 0
 
         let midX = (center.x + toolboxPos.x) / 2
-        let floorY = toolboxPos.y + 200
 
         run(SKAction.sequence([
-            // Dyker upp
-            SKAction.fadeAlpha(to: 1.0, duration: 0.05),
+            // Fade in lugnt
+            SKAction.fadeAlpha(to: 1.0, duration: 0.5),
 
-            // Snurr!
-            SKAction.rotate(byAngle: .pi * 2, duration: 0.3),
+            // Tjuvrusning direkt — smyger framåt och växer
+            SKAction.group([
+                SKAction.moveBy(x: 100, y: -130, duration: 0.8),
+                SKAction.scale(to: 1.59, duration: 0.8),
+                SKAction.sequence([
+                    SKAction.rotate(toAngle: 0.06, duration: 0.20),
+                    SKAction.rotate(toAngle: -0.06, duration: 0.20),
+                    SKAction.rotate(toAngle: 0.04, duration: 0.20),
+                    SKAction.rotate(toAngle: -0.04, duration: 0.20)
+                ])
+            ]),
 
-            // Knackning — tippa upp, slå ner, stråleffekt, liten studs
-            SKAction.rotate(toAngle: 0.6, duration: 0.08),
-            SKAction.rotate(toAngle: -0.15, duration: 0.03),
-            SKAction.run { [weak self] in self?.spawnStrikeEffect(big: true) },
-            SKAction.moveBy(x: 0, y: -8, duration: 0.02),
-            SKAction.moveBy(x: 0, y: 8, duration: 0.04),
+            // Står stilla nära framkant
+            SKAction.rotate(toAngle: 0, duration: 0.08),
+            SKAction.wait(forDuration: 0.3),
+
+            // Retsam knick — "haha, jag är här!"
+            SKAction.rotate(toAngle: -0.12, duration: 0.08),
+            SKAction.rotate(toAngle: 0.08, duration: 0.06),
             SKAction.rotate(toAngle: 0, duration: 0.05),
+            SKAction.wait(forDuration: 0.2),
 
-            SKAction.wait(forDuration: 0.25),
+            // Långsam vickning — hejdå
+            SKAction.rotate(toAngle: 0.3, duration: 0.30),
+            SKAction.rotate(toAngle: -0.3, duration: 0.40),
+            SKAction.rotate(toAngle: 0.2, duration: 0.30),
+            SKAction.rotate(toAngle: -0.15, duration: 0.25),
+            SKAction.rotate(toAngle: 0, duration: 0.20),
 
-            // Studs 1 — stor båge snett ner mot toolbox
-            SKAction.group([
-                SKAction.moveTo(x: midX, duration: 0.35),
-                SKAction.sequence([
-                    SKAction.moveBy(x: 0, y: 120, duration: 0.15),
-                    SKAction.moveTo(y: floorY, duration: 0.20)
-                ]),
-                SKAction.scale(to: 0.55, duration: 0.35),
-                SKAction.rotate(byAngle: .pi * 2, duration: 0.35)
-            ]),
+            SKAction.wait(forDuration: 0.2),
 
-            // Studs 2 — mindre båge
-            SKAction.group([
-                SKAction.moveTo(x: toolboxPos.x + 30, duration: 0.25),
-                SKAction.sequence([
-                    SKAction.moveBy(x: 0, y: 80, duration: 0.10),
-                    SKAction.moveTo(y: floorY, duration: 0.15)
-                ]),
-                SKAction.scale(to: 0.30, duration: 0.25),
-                SKAction.rotate(byAngle: .pi * 1.5, duration: 0.25)
-            ]),
+            // Knackning — tippa upp, slå ner, strålar + flash
+            SKAction.rotate(toAngle: 0.7, duration: 0.12),
+            SKAction.rotate(toAngle: -0.2, duration: 0.04),
+            SKAction.run { [weak self] in
+                self?.spawnStrikeEffect(big: true)
+                self?.spawnFlash()
+            },
+            SKAction.moveBy(x: 0, y: -10, duration: 0.02),
+            SKAction.moveBy(x: 0, y: 10, duration: 0.04),
+            SKAction.rotate(toAngle: 0, duration: 0.06),
 
-            // Studs 3 — liten piruett ovanför toolbox
-            SKAction.group([
-                SKAction.moveTo(x: toolboxPos.x, duration: 0.18),
-                SKAction.sequence([
-                    SKAction.moveBy(x: 0, y: 40, duration: 0.08),
-                    SKAction.moveTo(y: toolboxPos.y + 50, duration: 0.10)
-                ]),
-                SKAction.scale(to: 0.12, duration: 0.18),
-                SKAction.rotate(byAngle: .pi, duration: 0.18)
-            ]),
+            SKAction.wait(forDuration: 0.15),
 
-            // Dyker ner i lådan
-            SKAction.group([
-                SKAction.move(to: toolboxPos, duration: 0.12),
-                SKAction.scale(to: 0.05, duration: 0.12),
-                SKAction.fadeOut(withDuration: 0.12)
-            ]),
+            // Liten busig vickning innan den smiter
+            SKAction.rotate(toAngle: 0.25, duration: 0.12),
+            SKAction.rotate(toAngle: -0.3, duration: 0.15),
+            SKAction.rotate(toAngle: 0.15, duration: 0.10),
+            SKAction.rotate(toAngle: 0, duration: 0.08),
+
+            // Tar fart...
+            SKAction.wait(forDuration: 0.1),
+
+            // POFF! — stor flash och smiter iväg blixtsnabbt
+            SKAction.run { [weak self] in self?.spawnFlash() },
+
+            // Första halvan — flyger mot lådan från nuvarande position
+            SKAction.run { [weak self] in
+                guard let self else { return }
+                let currentPos = self.position
+                let midPoint = CGPoint(x: (currentPos.x + toolboxPos.x) / 2,
+                                       y: (currentPos.y + toolboxPos.y) / 2 + 80)
+
+                // Första halvan — synlig
+                let firstHalf = SKAction.group([
+                    SKAction.move(to: midPoint, duration: 0.12),
+                    SKAction.scale(to: 0.4, duration: 0.12),
+                    SKAction.rotate(byAngle: .pi * 1.5, duration: 0.12)
+                ])
+
+                // Andra halvan — fadear ut magiskt
+                let secondHalf = SKAction.group([
+                    SKAction.move(to: CGPoint(x: toolboxPos.x, y: toolboxPos.y + 60), duration: 0.12),
+                    SKAction.scale(to: 0.10, duration: 0.12),
+                    SKAction.rotate(byAngle: .pi * 1.5, duration: 0.12),
+                    SKAction.fadeOut(withDuration: 0.12)
+                ])
+
+                self.run(SKAction.sequence([firstHalf, secondHalf]), withKey: "flyToBox")
+            },
+            SKAction.wait(forDuration: 0.24),
+
+            // Tre flashar — baam!
+            SKAction.run { [weak self] in self?.spawnFlash() },
+            SKAction.wait(forDuration: 0.10),
+            SKAction.run { [weak self] in self?.spawnFlash() },
+            SKAction.wait(forDuration: 0.08),
+            SKAction.run { [weak self] in self?.spawnFlash() },
 
             SKAction.run { completion() }
         ]), withKey: "waveBye")
