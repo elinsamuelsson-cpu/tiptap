@@ -784,6 +784,74 @@ class HammerNode: SKSpriteNode {
         ]), withKey: "reversePeekABoo")
     }
 
+    // MARK: - Hammer Parade (dela på sig och dansa i parad)
+
+    /// Hammaren delar på sig till `count` hammare som ställer sig på rad.
+    /// Returnerar klonerna via completion så GameScene kan hantera dem vidare.
+    func parade(count: Int, completion: @escaping ([SKSpriteNode]) -> Void) {
+        guard let parent = self.parent, count >= 2 else { completion([]); return }
+        removeAllActions()
+        zRotation = 0
+
+        let screenWidth = parent.scene?.frame.width ?? 2732
+        let margin: CGFloat = 120
+        let usable = screenWidth - margin * 2
+        let baseY = position.y
+
+        // Beräkna skalning så alla hammare får plats bredvid varandra
+        let gap: CGFloat = 30
+        let maxTotalWidth = CGFloat(count) * size.width + CGFloat(count - 1) * gap
+        let paradeScale = min(1.0, usable / maxTotalWidth)
+        let scaledWidth = size.width * paradeScale
+        let spacing = scaledWidth + gap
+        let totalWidth = CGFloat(count - 1) * spacing
+        let startX = (screenWidth - totalWidth) / 2
+
+        // ── Kloner poppar ut ur originalet ──
+
+        var clones: [SKSpriteNode] = []
+
+        for i in 1..<count {
+            let clone = SKSpriteNode(texture: self.texture, size: self.size)
+            clone.zPosition = self.zPosition
+            clone.position = self.position
+            clone.setScale(0.01)
+            clone.alpha = 0
+            clone.zRotation = 0
+            clone.name = "hammerClone"
+            parent.addChild(clone)
+            clones.append(clone)
+
+            let targetX = startX + CGFloat(i) * spacing
+            let popDelay = SKAction.wait(forDuration: Double(i) * 0.12)
+            let popIn = SKAction.group([
+                SKAction.fadeAlpha(to: 1.0, duration: 0.15),
+                SKAction.scale(to: paradeScale, duration: 0.25),
+                SKAction.move(to: CGPoint(x: targetX, y: baseY), duration: 0.3)
+            ])
+            popIn.timingMode = .easeOut
+            clone.run(SKAction.sequence([popDelay, popIn]))
+        }
+
+        // Tid tills alla kloner är på plats
+        let setupTime = Double(count - 1) * 0.12 + 0.3
+
+        // ── Originalet glider till sin plats och väntar ──
+
+        run(SKAction.sequence([
+            SKAction.group([
+                SKAction.move(to: CGPoint(x: startX, y: baseY), duration: 0.3),
+                SKAction.scale(to: paradeScale, duration: 0.3)
+            ]),
+
+            // Vänta tills alla kloner landat
+            SKAction.wait(forDuration: setupTime - 0.3),
+
+            // Alla på plats — completion
+            SKAction.run { completion(clones) }
+        ]), withKey: "parade")
+    }
+
     // MARK: - Quick Strike (före portrait)
 
     /// Snabb hamring med blixt, sedan completion.
