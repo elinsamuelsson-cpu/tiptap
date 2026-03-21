@@ -192,12 +192,19 @@ class ToolboxNode: SKSpriteNode {
         stopGlitter()
         removeAction(forKey: "breathe")
         removeAction(forKey: "idleShake")
+        removeAction(forKey: "fadeBack")
+        // Byt till alpha-blend FÖRST, sedan fada ut — undviker svart multiply-artefakt
         blendMode = .alpha
+        run(SKAction.fadeOut(withDuration: duration), withKey: "fadeAway")
         glowNode?.run(SKAction.fadeOut(withDuration: duration))
-        run(SKAction.fadeOut(withDuration: duration))
     }
 
     func fadeBack(duration: TimeInterval = 2.0) {
+        removeAction(forKey: "fadeAway")
+        // Starta osynlig i alpha-mode, fada in, byt till multiply när synlig
+        blendMode = .alpha
+        alpha = 0
+        colorBlendFactor = 0
         run(SKAction.sequence([
             SKAction.fadeIn(withDuration: duration),
             SKAction.run { [weak self] in
@@ -207,7 +214,7 @@ class ToolboxNode: SKSpriteNode {
                 self?.startBreathing()
                 self?.startIdleShake()
             }
-        ]))
+        ]), withKey: "fadeBack")
         glowNode?.run(SKAction.fadeAlpha(to: 0.25, duration: duration))
     }
 

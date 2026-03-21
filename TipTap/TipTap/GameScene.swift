@@ -192,14 +192,11 @@ class GameScene: SKScene {
         ]))
 
         // Mjuk fade-in för toolbox efter reset
-        toolboxNode.alpha = 0.0
-        toolboxNode.blendMode = .alpha
         toolboxNode.removeAction(forKey: "alphaPulse")
         toolboxNode.run(SKAction.sequence([
             SKAction.wait(forDuration: 0.9),
-            SKAction.fadeIn(withDuration: 3.0),
             SKAction.run { [weak self] in
-                self?.toolboxNode.blendMode = .multiply
+                self?.toolboxNode.fadeBack(duration: 3.0)
             }
         ]))
     }
@@ -277,6 +274,9 @@ class GameScene: SKScene {
         let screenCenter = CGPoint(x: frame.midX, y: frame.midY)
         let wallPos = CGPoint(x: 1495, y: 1450) // höger om dörren
 
+        // Blockera ytterligare tap under hela sekvensen
+        portraitStep = -1
+
         // Hammaren slår till med blixt, sedan tonar ut
         hammerNode.quickStrike { [weak self] in
             guard let self else { return }
@@ -284,7 +284,7 @@ class GameScene: SKScene {
             // Portrait dyker upp centriskt i full storlek
             let portrait = SKSpriteNode(imageNamed: "portrait_hall2")
             portrait.position = screenCenter
-            portrait.zPosition = 11
+            portrait.zPosition = 5
             portrait.setScale(1.0)
             portrait.alpha = 0
             portrait.name = "portrait"
@@ -397,40 +397,47 @@ class GameScene: SKScene {
 
     private func startHammerCarousel() {
         paradePhase = -1  // animerar
-        let allCurrent = [hammerNode!] + hammerClones
-        let currentCount = allCurrent.count
-        let totalCount = currentCount * 2
 
-        // Stoppa idle på alla
-        for hammer in allCurrent {
-            hammer.removeAction(forKey: "paradeIdle")
+        // Tre storlekar — stor inre, mellan, liten yttre
+        let innerScale: CGFloat = 0.45
+        let middleScale: CGFloat = 0.32
+        let outerScale: CGFloat = 0.22
+
+        // Ta bort ALLA gamla kloner och hammarens animationer
+        let allOld = [hammerNode!] + hammerClones
+        let totalCount = allOld.count * 2
+        for clone in hammerClones {
+            clone.removeAllActions()
+            clone.removeFromParent()
         }
+        hammerClones = []
+        hammerNode.removeAllActions()
 
-        // Skapa nya kloner (dubblering)
-        var newClones: [SKSpriteNode] = []
-        for hammer in allCurrent {
-            let clone = SKSpriteNode(texture: hammerNode.texture, size: hammerNode.size)
+        // Göm originalet — använd BARA identiska kloner i karusellen
+        hammerNode.removeFromParent()
+        hammerNode.alpha = 0
+
+        // Skapa ALLA hammare i en enda loop — garanterat identiska
+        let refHammer = SKSpriteNode(imageNamed: "hammer1")
+        let cloneSize = refHammer.size
+        refHammer.removeFromParent()  // Användes bara för att läsa size
+
+        var allHammers: [SKSpriteNode] = []
+        for _ in 0..<totalCount {
+            let clone = SKSpriteNode(imageNamed: "hammer1")
             clone.zPosition = hammerNode.zPosition
-            clone.position = hammer.position
-            clone.setScale(0.01)
-            clone.alpha = 0
-            clone.zRotation = 0
+            clone.position = CGPoint(x: frame.midX, y: frame.midY)
+            clone.setScale(innerScale)
             clone.name = "hammerClone"
             addChild(clone)
-            newClones.append(clone)
-
-            // Pop ut ur originalet
-            clone.run(SKAction.group([
-                SKAction.fadeAlpha(to: 1.0, duration: 0.2),
-                SKAction.scale(to: hammer.xScale, duration: 0.25)
-            ]))
+            hammerClones.append(clone)
+            allHammers.append(clone)
         }
-        hammerClones.append(contentsOf: newClones)
-        let allHammers = allCurrent + newClones
 
         // Karusell-container i mitten av skärmen
         let center = CGPoint(x: frame.midX, y: frame.midY)
-        let radius: CGFloat = 400
+        let hammerHeight = cloneSize.height * innerScale
+        let radius: CGFloat = hammerHeight / 2 + 80
         let container = SKNode()
         container.position = center
         container.zPosition = hammerNode.zPosition
@@ -445,8 +452,10 @@ class GameScene: SKScene {
             let targetLocal = CGPoint(x: cos(angle) * radius, y: sin(angle) * radius)
             let targetWorld = CGPoint(x: center.x + targetLocal.x, y: center.y + targetLocal.y)
 
-            // Flytta till position + vinkla skaftet mot mitten (behåll storlek)
+            // Flytta till position + vinkla skaftet mot mitten
             let hammerRotation = angle - .pi / 2
+            // Alla hammare över tavlan (zPosition 5)
+            hammer.zPosition = 12
             let moveToCircle = SKAction.group([
                 SKAction.move(to: targetWorld, duration: 0.5),
                 SKAction.rotate(toAngle: hammerRotation, duration: 0.5)
@@ -468,40 +477,43 @@ class GameScene: SKScene {
         // Starta snurrning efter alla landat
         let setupTime = Double(totalCount) * 0.05 + 0.5
 
-        let minRadius: CGFloat = 0
+        let minRadius: CGFloat = hammerHeight / 2 + 40
         let maxRadius: CGFloat = max(frame.width, frame.height) / 2
         let pulseDuration: TimeInterval = 1.0
 
+        let innerRadius = radius
+        let outerRadius: CGFloat = radius + 300
+        let thirdRingRadius: CGFloat = radius + 600
+        let edgeRadius: CGFloat = max(frame.width, frame.height) / 2
+
         run(SKAction.sequence([
             SKAction.wait(forDuration: setupTime + 0.2),
+
+            // ── Varv 1: Snurra med pulsering + strikes ──
             SKAction.run { [weak self] in
                 guard let self else { return }
 
-                // Snurra karusellen — 2 varv
-                let spin = SKAction.rotate(byAngle: .pi * 4, duration: 5.0)
-                spin.timingMode = .easeInEaseOut
-                container.run(spin, withKey: "carouselSpin")
+                let spin1 = SKAction.rotate(byAngle: .pi * 2, duration: 3.0)
+                spin1.timingMode = .easeInEaseOut
+                container.run(spin1, withKey: "carouselSpin")
 
-                // Pulsera varje hammares avstånd in/ut medan den snurrar
                 for child in container.children {
                     guard let hammer = child as? SKSpriteNode else { continue }
-                    let pos = hammer.position
-                    let currentAngle = atan2(pos.y, pos.x)
+                    let currentAngle = atan2(hammer.position.y, hammer.position.x)
 
                     let moveIn = SKAction.move(to: CGPoint(x: cos(currentAngle) * minRadius,
                                                             y: sin(currentAngle) * minRadius),
                                                duration: pulseDuration)
                     moveIn.timingMode = .easeInEaseOut
-                    let moveOut = SKAction.move(to: CGPoint(x: cos(currentAngle) * maxRadius,
-                                                             y: sin(currentAngle) * maxRadius),
+                    let moveOut = SKAction.move(to: CGPoint(x: cos(currentAngle) * edgeRadius,
+                                                             y: sin(currentAngle) * edgeRadius),
                                                 duration: pulseDuration)
                     moveOut.timingMode = .easeInEaseOut
-                    let moveBack = SKAction.move(to: CGPoint(x: cos(currentAngle) * radius,
-                                                              y: sin(currentAngle) * radius),
+                    let moveBack = SKAction.move(to: CGPoint(x: cos(currentAngle) * innerRadius,
+                                                              y: sin(currentAngle) * innerRadius),
                                                  duration: pulseDuration)
                     moveBack.timingMode = .easeInEaseOut
 
-                    // Knackning med flash + strålar vid varje ytterpunkt
                     let strike = SKAction.run { [weak self] in
                         guard let self else { return }
                         let tipLocal = CGPoint(x: 0, y: hammer.size.height * 0.45 * hammer.yScale)
@@ -513,33 +525,610 @@ class GameScene: SKScene {
                     }
 
                     hammer.run(SKAction.sequence([
-                        moveIn, strike, moveOut, strike,
-                        moveIn, strike, moveOut, strike,
-                        moveBack
+                        moveIn, strike, moveOut, strike, moveBack
                     ]), withKey: "radiusPulse")
                 }
             },
-            SKAction.wait(forDuration: 5.2),
+            SKAction.wait(forDuration: 3.2),
+
+            // ── Alla ut till kanten ──
+            SKAction.run {
+                for child in container.children {
+                    guard let hammer = child as? SKSpriteNode else { continue }
+                    let currentAngle = atan2(hammer.position.y, hammer.position.x)
+                    let moveToEdge = SKAction.move(to: CGPoint(x: cos(currentAngle) * edgeRadius,
+                                                                y: sin(currentAngle) * edgeRadius),
+                                                   duration: 0.6)
+                    moveToEdge.timingMode = .easeInEaseOut
+                    hammer.run(moveToEdge, withKey: "radiusPulse")
+                }
+            },
+            SKAction.wait(forDuration: 0.7),
+
+            // ── Dubbla: skapa yttre ring ──
             SKAction.run { [weak self] in
                 guard let self else { return }
-                // Stanna — idle-vickning
-                let allInCarousel = container.children.compactMap { $0 as? SKSpriteNode }
-                for hammer in allInCarousel {
-                    hammer.removeAction(forKey: "radiusPulse")
-                    self.startParadeIdle(hammer)
+                self.spawnDoubleFlash()
+                let innerHammers = container.children.compactMap { $0 as? SKSpriteNode }
+                let innerCount = innerHammers.count
+
+                // Flytta inre ringen tillbaka till innerRadius
+                for hammer in innerHammers {
+                    let currentAngle = atan2(hammer.position.y, hammer.position.x)
+                    let moveIn = SKAction.move(to: CGPoint(x: cos(currentAngle) * innerRadius,
+                                                            y: sin(currentAngle) * innerRadius),
+                                               duration: 0.5)
+                    moveIn.timingMode = .easeInEaseOut
+                    hammer.run(moveIn, withKey: "radiusPulse")
                 }
-                self.paradePhase = 2
+
+                // Yttre ring — samma antal, förskjutet en halv position
+                let outerAngleStep = (.pi * 2) / CGFloat(innerCount)
+                let angleOffset = outerAngleStep / 2  // Halvt steg förskjutet
+
+                for i in 0..<innerCount {
+                    let angle = outerAngleStep * CGFloat(i) - .pi / 2 + angleOffset
+                    let clone = SKSpriteNode(imageNamed: "hammer1")
+                    clone.setScale(0.01)
+                    clone.zRotation = angle - .pi / 2
+                    clone.alpha = 0
+                    clone.name = "hammerClone"
+                    clone.zPosition = 11  // Mellanringen — under inre
+
+                    // Startar i mitten, poppar ut till yttre ringen med mellanstorlek
+                    clone.position = .zero
+                    container.addChild(clone)
+                    self.hammerClones.append(clone)
+
+                    let targetPos = CGPoint(x: cos(angle) * outerRadius, y: sin(angle) * outerRadius)
+                    let popOut = SKAction.group([
+                        SKAction.fadeAlpha(to: 1.0, duration: 0.2),
+                        SKAction.move(to: targetPos, duration: 0.5),
+                        SKAction.scale(to: middleScale, duration: 0.5)
+                    ])
+                    popOut.timingMode = .easeOut
+                    clone.run(SKAction.sequence([
+                        SKAction.wait(forDuration: Double(i) * 0.04),
+                        popOut
+                    ]))
+                }
+            },
+            SKAction.wait(forDuration: 0.8),
+
+            // ── Varv 2: Båda ringarna snurrar + hammarslag + vågpuls ──
+            SKAction.run { [weak self] in
+                guard let self else { return }
+
+                // Containern snurrar medurs
+                let spin2 = SKAction.rotate(byAngle: .pi * 2, duration: 3.5)
+                spin2.timingMode = .easeInEaseOut
+                container.run(spin2, withKey: "carouselSpin2")
+
+                // Hitta hammare per ring baserat på zPosition-tagg
+                let allH = container.children.compactMap { $0 as? SKSpriteNode }
+                let innerRing = allH.filter { $0.zPosition == 12 }
+                let outerRing = allH.filter { $0.zPosition == 11 }
+
+                // Inre ringen: rytmiska hammarslag
+                for (i, hammer) in innerRing.enumerated() {
+                    let delay = Double(i) * 0.1
+                    let slam = SKAction.sequence([
+                        SKAction.wait(forDuration: delay),
+                        SKAction.repeatForever(SKAction.sequence([
+                            SKAction.rotate(byAngle: 0.3, duration: 0.12),
+                            SKAction.rotate(byAngle: -0.3, duration: 0.06),
+                            SKAction.wait(forDuration: 0.32)
+                        ]))
+                    ])
+                    hammer.run(slam, withKey: "hammerSlam")
+                }
+
+                // Yttre ringen: vågpuls — skala upp/ner sekventiellt
+                for (i, hammer) in outerRing.enumerated() {
+                    let delay = Double(i) * 0.15
+                    let wave = SKAction.sequence([
+                        SKAction.wait(forDuration: delay),
+                        SKAction.repeatForever(SKAction.sequence([
+                            SKAction.scale(to: middleScale * 1.4, duration: 0.2),
+                            SKAction.scale(to: middleScale, duration: 0.2),
+                            SKAction.wait(forDuration: 0.4)
+                        ]))
+                    ])
+                    hammer.run(wave, withKey: "wavePulse")
+                }
+            },
+            SKAction.wait(forDuration: 3.7),
+
+            // Stoppa individuella effekter och återställ skalor
+            SKAction.run { [weak self] in
+                guard let self else { return }
+                let allH = container.children.compactMap { $0 as? SKSpriteNode }
+                let midDist = (innerRadius + outerRadius) / 2
+                for hammer in allH {
+                    hammer.removeAction(forKey: "hammerSlam")
+                    hammer.removeAction(forKey: "wavePulse")
+                    hammer.zRotation = atan2(hammer.position.y, hammer.position.x) - .pi / 2
+                    // Återställ skala baserat på ring-tagg (zPosition)
+                    if hammer.zPosition == 12 {
+                        hammer.setScale(innerScale)
+                    } else {
+                        hammer.setScale(middleScale)
+                    }
+                }
+            },
+
+            // ── Alla ut till kanten igen ──
+            SKAction.run {
+                for child in container.children {
+                    guard let hammer = child as? SKSpriteNode else { continue }
+                    let currentAngle = atan2(hammer.position.y, hammer.position.x)
+                    let moveToEdge = SKAction.move(to: CGPoint(x: cos(currentAngle) * edgeRadius,
+                                                                y: sin(currentAngle) * edgeRadius),
+                                                   duration: 0.6)
+                    moveToEdge.timingMode = .easeInEaseOut
+                    hammer.run(moveToEdge, withKey: "radiusPulse")
+                }
+            },
+            SKAction.wait(forDuration: 0.7),
+
+            // ── Dubbla igen: tredje ring ──
+            SKAction.run { [weak self] in
+                guard let self else { return }
+                self.spawnDoubleFlash()
+                let currentHammers = container.children.compactMap { $0 as? SKSpriteNode }
+                let currentCount = currentHammers.count
+
+                // Flytta befintliga tillbaka till sina ringar
+                for hammer in currentHammers {
+                    let currentAngle = atan2(hammer.position.y, hammer.position.x)
+                    let dist = hypot(hammer.position.x, hammer.position.y)
+                    let targetR = dist < (innerRadius + outerRadius) / 2 ? innerRadius : outerRadius
+                    let moveBack = SKAction.move(to: CGPoint(x: cos(currentAngle) * targetR,
+                                                              y: sin(currentAngle) * targetR),
+                                                 duration: 0.5)
+                    moveBack.timingMode = .easeInEaseOut
+                    hammer.run(moveBack, withKey: "radiusPulse")
+                }
+
+                // Tredje ring — samma antal som nuvarande, förskjutet, minst storlek
+                let thirdAngleStep = (.pi * 2) / CGFloat(currentCount)
+                let thirdOffset = thirdAngleStep / 3
+
+                for i in 0..<currentCount {
+                    let angle = thirdAngleStep * CGFloat(i) - .pi / 2 + thirdOffset
+                    let clone = SKSpriteNode(imageNamed: "hammer1")
+                    clone.setScale(0.01)
+                    clone.zRotation = angle - .pi / 2
+                    clone.alpha = 0
+                    clone.name = "hammerClone"
+                    clone.zPosition = 10  // Yttersta ringen — underst men över tavlan
+
+                    clone.position = .zero
+                    container.addChild(clone)
+                    self.hammerClones.append(clone)
+
+                    let targetPos = CGPoint(x: cos(angle) * thirdRingRadius, y: sin(angle) * thirdRingRadius)
+                    let popOut = SKAction.group([
+                        SKAction.fadeAlpha(to: 1.0, duration: 0.2),
+                        SKAction.move(to: targetPos, duration: 0.5),
+                        SKAction.scale(to: outerScale, duration: 0.5)
+                    ])
+                    popOut.timingMode = .easeOut
+                    clone.run(SKAction.sequence([
+                        SKAction.wait(forDuration: Double(i) * 0.03),
+                        popOut
+                    ]))
+                }
+            },
+            SKAction.wait(forDuration: 0.8),
+
+            // ── Varv 3: Tre motroterande ringar + hammarslag + våg ──
+            SKAction.run { [weak self] in
+                guard let self else { return }
+
+                // Containern snurrar medurs (inre + yttre följer med)
+                let spin3 = SKAction.rotate(byAngle: .pi * 2, duration: 4.0)
+                spin3.timingMode = .easeInEaseOut
+                container.run(spin3, withKey: "carouselSpin3")
+
+                // Hitta hammare per ring
+                // Hitta hammare per ring baserat på zPosition-tagg
+                let allH = container.children.compactMap { $0 as? SKSpriteNode }
+                let ring1 = allH.filter { $0.zPosition == 12 }
+                let ring2 = allH.filter { $0.zPosition == 11 }
+                let ring3 = allH.filter { $0.zPosition == 10 }
+
+                // Mellanringen: motrotera (snurr individuellt moturs runt sin position)
+                for hammer in ring2 {
+                    let currentAngle = atan2(hammer.position.y, hammer.position.x)
+                    let r = hypot(hammer.position.x, hammer.position.y)
+
+                    // Rotera runt mitten moturs via position-animation
+                    let counterSpin = SKAction.customAction(withDuration: 4.0) { node, elapsed in
+                        let t = elapsed / 4.0
+                        let newAngle = currentAngle - CGFloat.pi * 2 * 2 * t  // 2 varv moturs
+                        node.position = CGPoint(x: cos(newAngle) * r, y: sin(newAngle) * r)
+                        node.zRotation = newAngle - .pi / 2  // Skaft mot mitten
+                    }
+                    hammer.run(counterSpin, withKey: "counterSpin")
+                }
+
+                // Inre ringen: synkroniserade hammarslag med flash
+                for (i, hammer) in ring1.enumerated() {
+                    let delay = Double(i) * 0.08
+                    let slam = SKAction.sequence([
+                        SKAction.wait(forDuration: delay),
+                        SKAction.repeatForever(SKAction.sequence([
+                            SKAction.rotate(byAngle: 0.35, duration: 0.1),
+                            SKAction.rotate(byAngle: -0.35, duration: 0.05),
+                            SKAction.wait(forDuration: 0.35)
+                        ]))
+                    ])
+                    hammer.run(slam, withKey: "hammerSlam")
+                }
+
+                // Yttre ringen: vågpuls
+                for (i, hammer) in ring3.enumerated() {
+                    let delay = Double(i) * 0.12
+                    let wave = SKAction.sequence([
+                        SKAction.wait(forDuration: delay),
+                        SKAction.repeatForever(SKAction.sequence([
+                            SKAction.scale(to: outerScale * 1.5, duration: 0.18),
+                            SKAction.scale(to: outerScale, duration: 0.18),
+                            SKAction.wait(forDuration: 0.3)
+                        ]))
+                    ])
+                    hammer.run(wave, withKey: "wavePulse")
+                }
+
+                // Flash vid halvvägs och slutet
+                self.run(SKAction.sequence([
+                    SKAction.wait(forDuration: 2.0),
+                    SKAction.run { self.spawnDoubleFlash() },
+                    SKAction.wait(forDuration: 1.8),
+                    SKAction.run { self.spawnDoubleFlash() }
+                ]))
+            },
+            SKAction.wait(forDuration: 4.2),
+
+            // Stoppa alla individuella effekter och återställ skalor
+            SKAction.run {
+                let allH = container.children.compactMap { $0 as? SKSpriteNode }
+                let midInner = (innerRadius + outerRadius) / 2
+                let midOuter = (outerRadius + thirdRingRadius) / 2
+                for hammer in allH {
+                    hammer.removeAction(forKey: "hammerSlam")
+                    hammer.removeAction(forKey: "wavePulse")
+                    hammer.removeAction(forKey: "counterSpin")
+                    // Återställ skala baserat på ring-tagg (zPosition)
+                    if hammer.zPosition == 12 {
+                        hammer.setScale(innerScale)
+                    } else if hammer.zPosition == 11 {
+                        hammer.setScale(middleScale)
+                    } else {
+                        hammer.setScale(outerScale)
+                    }
+                }
+            },
+
+            // ── Sprida ut i jämna centrerade rader + marsch på plats ──
+            SKAction.run { [weak self] in
+                guard let self else { return }
+                self.spawnDoubleFlash()
+
+                let allH = container.children.compactMap { $0 as? SKSpriteNode }
+                let total = allH.count
+                guard total > 0 else { return }
+
+                // Stoppa allt och nollställ alla hammare
+                for hammer in allH {
+                    hammer.removeAllActions()
+                    hammer.zRotation = 0
+                }
+
+                let margin: CGFloat = 60
+                let screenW = self.frame.width
+                let screenH = self.frame.height
+
+                // Beräkna grid: fasta kolumner baserat på antal
+                let cols: Int
+                if total <= 4 { cols = 2 }
+                else if total <= 9 { cols = 3 }
+                else if total <= 16 { cols = 4 }
+                else if total <= 25 { cols = 5 }
+                else { cols = 6 }
+                let rows = Int(ceil(Double(total) / Double(cols)))
+
+                // Alla hammare samma storlek — baserat på cellstorlek
+                let cellW = (screenW - margin * 2) / CGFloat(cols)
+                let cellH = (screenH - margin * 2) / CGFloat(rows)
+                let refSize = SKSpriteNode(imageNamed: "hammer1").size
+                let gridScale = min(cellW / refSize.width,
+                                    cellH / refSize.height) * 0.9
+
+                // Reparentera alla till scenen
+                for hammer in allH {
+                    let worldPos = container.convert(hammer.position, to: self)
+                    hammer.removeFromParent()
+                    hammer.position = worldPos
+                    self.addChild(hammer)
+                }
+                container.removeFromParent()
+                self.carouselNode = nil
+
+                // Placera i centrerade rader
+                var hammerIndex = 0
+                let totalGridHeight = CGFloat(rows) * cellH
+                let startY = screenH / 2 + totalGridHeight / 2 - cellH / 2
+
+                for row in 0..<rows {
+                    // Antal i denna rad (sista raden kan ha färre)
+                    let countInRow = min(cols, total - row * cols)
+                    let rowWidth = CGFloat(countInRow) * cellW
+                    let rowStartX = (screenW - rowWidth) / 2 + cellW / 2
+                    let y = startY - CGFloat(row) * cellH
+
+                    for col in 0..<countInRow {
+                        guard hammerIndex < allH.count else { break }
+                        let hammer = allH[hammerIndex]
+                        hammer.removeAllActions()
+
+                        let x = rowStartX + CGFloat(col) * cellW
+
+                        let moveToGrid = SKAction.group([
+                            SKAction.move(to: CGPoint(x: x, y: y), duration: 0.6),
+                            SKAction.scale(to: gridScale, duration: 0.6),
+                            SKAction.rotate(toAngle: 0, duration: 0.4)
+                        ])
+                        moveToGrid.timingMode = .easeOut
+
+                        // Slumpmässigt beteende — varje hammare gör sitt
+                        let marchDelay = Double(hammerIndex) * 0.03
+
+                        hammer.run(SKAction.sequence([
+                            SKAction.wait(forDuration: marchDelay),
+                            moveToGrid,
+                            SKAction.wait(forDuration: TimeInterval.random(in: 0.1...0.5)),
+                            SKAction.run { [weak self] in
+                                self?.startGridIdle(hammer)
+                            }
+                        ]), withKey: "gridMarch")
+
+                        hammerIndex += 1
+                    }
+                }
+
+                // Efter 4 sekunder grid-kaos: synkroniserad knackning → idle-vickning
+                let gridIdleDuration: TimeInterval = 4.0
+                self.run(SKAction.sequence([
+                    SKAction.wait(forDuration: gridIdleDuration),
+                    SKAction.run { [weak self] in
+                        guard let self else { return }
+                        let gridHammers = self.hammerClones
+
+                        // Stoppa allt
+                        for hammer in gridHammers {
+                            hammer.removeAllActions()
+                            hammer.zRotation = 0
+                        }
+
+                        // Synkroniserade snurrar — alla snurrar samtidigt
+                        self.spawnDoubleFlash()
+
+                        for (i, hammer) in gridHammers.enumerated() {
+                            let delay = Double(i) * 0.015
+                            hammer.run(SKAction.sequence([
+                                SKAction.wait(forDuration: delay),
+                                // Snurr 1
+                                SKAction.rotate(byAngle: .pi * 2, duration: 0.35),
+                                SKAction.wait(forDuration: 0.1),
+                                // Snurr 2 — snabbare
+                                SKAction.rotate(byAngle: .pi * 2, duration: 0.25),
+                                SKAction.wait(forDuration: 0.08),
+                                // Snurr 3 — ännu snabbare
+                                SKAction.rotate(byAngle: .pi * 2, duration: 0.2),
+                                SKAction.rotate(toAngle: 0, duration: 0.05)
+                            ]), withKey: "gridSlam")
+                        }
+
+                        // Flash vid sista snurren
+                        self.run(SKAction.sequence([
+                            SKAction.wait(forDuration: 0.35 + 0.1 + 0.25 + 0.08 + 0.2),
+                            SKAction.run { [weak self] in self?.spawnDoubleFlash() }
+                        ]))
+                    },
+
+                    // Vänta tills snurrarna är klara
+                    SKAction.wait(forDuration: 1.5),
+                    SKAction.run { [weak self] in
+                        guard let self else { return }
+                        for hammer in self.hammerClones {
+                            hammer.removeAction(forKey: "gridSlam")
+                            hammer.zRotation = 0
+                            self.startParadeIdle(hammer)
+                        }
+                        self.paradePhase = 2
+                        self.startGridNudge()
+                    }
+                ]), withKey: "gridFinale")
             }
         ]), withKey: "carouselWait")
     }
 
     // MARK: - Hammer Parade Steg 3: Samla ihop → tillbaka till toolbox
 
+    private func spawnDoubleFlash() {
+        let screenCenter = CGPoint(x: frame.midX, y: frame.midY)
+        let flashSize = CGSize(width: frame.width, height: frame.height)
+
+        // Blixt 1
+        let flash1 = SKSpriteNode(color: .white, size: flashSize)
+        flash1.position = screenCenter
+        flash1.zPosition = 999
+        flash1.alpha = 0
+        addChild(flash1)
+        flash1.run(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.5, duration: 0.03),
+            SKAction.fadeAlpha(to: 0.0, duration: 0.05),
+            SKAction.fadeAlpha(to: 0.4, duration: 0.02),
+            SKAction.fadeOut(withDuration: 0.08),
+            SKAction.removeFromParent()
+        ]))
+
+        // Blixt 2 — fördröjd
+        run(SKAction.sequence([
+            SKAction.wait(forDuration: 0.15),
+            SKAction.run { [weak self] in
+                guard let self else { return }
+                let flash2 = SKSpriteNode(color: .white, size: flashSize)
+                flash2.position = screenCenter
+                flash2.zPosition = 999
+                flash2.alpha = 0
+                self.addChild(flash2)
+                flash2.run(SKAction.sequence([
+                    SKAction.fadeAlpha(to: 0.6, duration: 0.03),
+                    SKAction.fadeAlpha(to: 0.0, duration: 0.04),
+                    SKAction.fadeAlpha(to: 0.35, duration: 0.02),
+                    SKAction.fadeOut(withDuration: 0.1),
+                    SKAction.removeFromParent()
+                ]))
+            }
+        ]))
+    }
+
+    // MARK: - Grid Nudge (påminnelse att trycka)
+
+    private func startGridNudge() {
+        run(SKAction.sequence([
+            SKAction.wait(forDuration: TimeInterval.random(in: 6.0...10.0)),
+            SKAction.run { [weak self] in
+                guard let self, self.paradePhase == 2, !self.hammerClones.isEmpty else { return }
+
+                // Välj en slumpmässig hammare
+                let hammer = self.hammerClones[Int.random(in: 0..<self.hammerClones.count)]
+                hammer.removeAction(forKey: "gridIdle")
+
+                // Snurr + strålar från nosen
+                hammer.run(SKAction.sequence([
+                    SKAction.rotate(byAngle: .pi * 2, duration: 0.3),
+                    SKAction.run { [weak self] in
+                        let tipY = hammer.size.height * 0.45 * hammer.yScale
+                        let cosA = cos(hammer.zRotation)
+                        let sinA = sin(hammer.zRotation)
+                        let tipPos = CGPoint(x: hammer.position.x - tipY * sinA,
+                                             y: hammer.position.y + tipY * cosA)
+                        self?.spawnCarouselStrike(at: tipPos)
+                    },
+                    SKAction.rotate(toAngle: 0, duration: 0.05),
+                    SKAction.run { [weak self] in
+                        self?.startGridIdle(hammer)
+                    }
+                ]), withKey: "gridIdle")
+
+                // Starta nästa nudge
+                self.startGridNudge()
+            }
+        ]), withKey: "gridNudge")
+    }
+
+    // MARK: - Grid Idle (slumpmässiga hammareffekter)
+
+    private func startGridIdle(_ hammer: SKSpriteNode) {
+        let roll = Int.random(in: 0...4)
+        let action: SKAction
+
+        switch roll {
+        case 0:
+            // Marsch-steg — stor rörelse
+            let tilt: CGFloat = 0.2
+            let bob: CGFloat = 12
+            action = SKAction.sequence([
+                SKAction.group([
+                    SKAction.rotate(toAngle: tilt, duration: 0.12),
+                    SKAction.moveBy(x: -4, y: bob, duration: 0.12)
+                ]),
+                SKAction.group([
+                    SKAction.rotate(toAngle: 0, duration: 0.03),
+                    SKAction.moveBy(x: 4, y: -bob, duration: 0.03)
+                ]),
+                SKAction.group([
+                    SKAction.rotate(toAngle: -tilt, duration: 0.12),
+                    SKAction.moveBy(x: 4, y: bob, duration: 0.12)
+                ]),
+                SKAction.group([
+                    SKAction.rotate(toAngle: 0, duration: 0.03),
+                    SKAction.moveBy(x: -4, y: -bob, duration: 0.03)
+                ]),
+                SKAction.wait(forDuration: TimeInterval.random(in: 0.1...0.4))
+            ])
+
+        case 1:
+            // Helsnurr
+            action = SKAction.sequence([
+                SKAction.rotate(byAngle: .pi * 2, duration: 0.4),
+                SKAction.rotate(toAngle: 0, duration: 0.05),
+                SKAction.wait(forDuration: TimeInterval.random(in: 0.5...1.5))
+            ])
+
+        case 2:
+            // Knackning med strålar från hammarens nos
+            action = SKAction.sequence([
+                SKAction.rotate(toAngle: 0.35, duration: 0.1),
+                SKAction.rotate(toAngle: -0.1, duration: 0.04),
+                SKAction.run { [weak self] in
+                    // Beräkna nosposition
+                    let tipY = hammer.size.height * 0.45 * hammer.yScale
+                    let cosA = cos(hammer.zRotation)
+                    let sinA = sin(hammer.zRotation)
+                    let tipPos = CGPoint(x: hammer.position.x - tipY * sinA,
+                                         y: hammer.position.y + tipY * cosA)
+                    self?.spawnCarouselStrike(at: tipPos)
+                },
+                SKAction.moveBy(x: 0, y: -6, duration: 0.02),
+                SKAction.moveBy(x: 0, y: 6, duration: 0.03),
+                SKAction.rotate(toAngle: 0, duration: 0.05),
+                SKAction.wait(forDuration: TimeInterval.random(in: 0.8...2.0))
+            ])
+
+        case 3:
+            // Snabb skakning — kraftigare
+            action = SKAction.sequence([
+                SKAction.moveBy(x: 6, y: 3, duration: 0.03),
+                SKAction.moveBy(x: -10, y: -5, duration: 0.04),
+                SKAction.moveBy(x: 8, y: 4, duration: 0.03),
+                SKAction.moveBy(x: -4, y: -2, duration: 0.03),
+                SKAction.wait(forDuration: TimeInterval.random(in: 0.2...0.5))
+            ])
+
+        default:
+            // Vickning — större rörelse
+            action = SKAction.sequence([
+                SKAction.rotate(toAngle: 0.18, duration: 0.3),
+                SKAction.rotate(toAngle: -0.18, duration: 0.35),
+                SKAction.rotate(toAngle: 0.1, duration: 0.2),
+                SKAction.rotate(toAngle: 0, duration: 0.15),
+                SKAction.wait(forDuration: TimeInterval.random(in: 0.1...0.3))
+            ])
+        }
+
+        // Kör actionen, sedan starta nästa slumpmässiga action
+        hammer.run(SKAction.sequence([
+            action,
+            SKAction.run { [weak self] in
+                self?.startGridIdle(hammer)
+            }
+        ]), withKey: "gridIdle")
+    }
+
     private func endHammerParade() {
         paradePhase = -1  // animerar
+        removeAction(forKey: "gridNudge")
         let center = CGPoint(x: frame.midX, y: frame.midY)
 
-        // Samla alla hammare (kan vara i carousel-container eller scene)
+        // Dubbelflash
+        spawnDoubleFlash()
+
+        // Samla alla kloner (kan vara i carousel-container eller scene)
         var clones: [SKSpriteNode] = []
         if let container = carouselNode {
             for child in container.children {
@@ -548,9 +1137,6 @@ class GameScene: SKScene {
                     hammer.removeFromParent()
                     hammer.position = worldPos
                     addChild(hammer)
-                    if hammer == hammerNode {
-                        continue  // originalet hanteras separat
-                    }
                     clones.append(hammer)
                 }
             }
@@ -560,44 +1146,61 @@ class GameScene: SKScene {
             clones = hammerClones
         }
 
-        // Stoppa idle på alla
-        hammerNode.removeAction(forKey: "paradeIdle")
+        // Stoppa alla pågående animationer
         for clone in clones {
-            clone.removeAction(forKey: "paradeIdle")
+            clone.removeAllActions()
         }
 
-        // Kloner flyger till mitten och försvinner in i originalet
-        for (i, clone) in clones.enumerated() {
-            let flyToCenter = SKAction.group([
-                SKAction.move(to: center, duration: 0.4),
-                SKAction.scale(to: 0.05, duration: 0.4),
-                SKAction.fadeOut(withDuration: 0.35)
-            ])
-            flyToCenter.timingMode = .easeIn
-            clone.run(SKAction.sequence([
-                SKAction.wait(forDuration: Double(i) * 0.05),
-                flyToCenter,
-                SKAction.removeFromParent()
-            ]))
+        // ── Stora hammaren dyker upp FÖRST i mitten, överst ──
+        if hammerNode.parent == nil {
+            addChild(hammerNode)
         }
+        hammerNode.position = center
+        hammerNode.setScale(0.01)
+        hammerNode.zRotation = 0
+        hammerNode.alpha = 1.0
+        hammerNode.zPosition = 20  // Överst — ovanpå alla kloner
+
+        // Poppar upp till full storlek
+        let popUp = SKAction.scale(to: 1.0, duration: 0.3)
+        popUp.timingMode = .easeOut
+        hammerNode.run(popUp)
+
+        // ── Klonerna sugs in mot stora hammaren ──
+        run(SKAction.sequence([
+            SKAction.wait(forDuration: 0.4),
+            SKAction.run { [weak self] in
+                guard let self else { return }
+                for (i, clone) in clones.enumerated() {
+                    let suckIn = SKAction.group([
+                        SKAction.move(to: center, duration: 0.35),
+                        SKAction.scale(to: 0.05, duration: 0.35),
+                        SKAction.fadeOut(withDuration: 0.3)
+                    ])
+                    suckIn.timingMode = .easeIn
+                    clone.run(SKAction.sequence([
+                        SKAction.wait(forDuration: Double(i) * 0.03),
+                        suckIn,
+                        SKAction.removeFromParent()
+                    ]))
+                }
+            }
+        ]))
         hammerClones = []
 
-        // Originalet flyger till mitten, rätar upp sig, växer till full storlek
-        let moveToCenter = SKAction.group([
-            SKAction.move(to: center, duration: 0.4),
-            SKAction.scale(to: 1.0, duration: 0.4),
-            SKAction.rotate(toAngle: 0, duration: 0.4)
-        ])
-        moveToCenter.timingMode = .easeInEaseOut
-        hammerNode.run(moveToCenter)
+        let mergeTime = 0.4 + Double(clones.count) * 0.03 + 0.45
 
-        let mergeTime = Double(clones.count) * 0.05 + 0.5
-
-        // Vänta tills alla samlats, sedan waveBye tillbaka till toolbox
+        // Dubbelflash + waveBye
         run(SKAction.sequence([
             SKAction.wait(forDuration: mergeTime),
             SKAction.run { [weak self] in
+                self?.spawnDoubleFlash()
+            },
+            SKAction.wait(forDuration: 0.3),
+            SKAction.run { [weak self] in
                 guard let self else { return }
+                // Återställ zPosition
+                self.hammerNode.zPosition = 14
 
                 self.hammerNode.waveBye(at: center, toolboxPos: self.toolboxNode.position) {
                     // 2-3 sekunder tomt, sedan fada tillbaka
@@ -611,7 +1214,6 @@ class GameScene: SKScene {
                                 SKAction.run { self.owl.startSleeping() }
                             ]))
                             self.transitionManager.deactivateAll()
-                            self.toolboxNode.blendMode = .alpha
                             self.toolboxNode.fadeBack()
                             self.hammerNode.reset()
                             self.paradePhase = 0
@@ -704,6 +1306,9 @@ class GameScene: SKScene {
         let screenCenter = CGPoint(x: frame.midX, y: frame.midY)
 
         guard let oldPortrait = currentPortrait else { return }
+
+        // Blockera ytterligare tap under hela swap-sekvensen
+        portraitStep = 2
 
         // Hammaren slår till med blixt, sedan tonar ut
         hammerNode.quickStrike { [weak self] in
@@ -818,7 +1423,6 @@ class GameScene: SKScene {
                                             SKAction.run { self.owl.startSleeping() }
                                         ]))
                                         self.transitionManager.deactivateAll()
-                                        self.toolboxNode.blendMode = .alpha
                                         self.toolboxNode.fadeBack()
                                         self.hammerNode.reset()
                                         self.portraitStep = 3
@@ -2196,6 +2800,7 @@ class GameScene: SKScene {
         hatNode.stopGlitter()
         hatNode.stopIdleTimer()
         toolboxNode.fadeAway()
+        toolboxNode.isHidden = true
 
         // Släck ugglan + skugga under hela hatt/kanin-sessionen
         owl.run(SKAction.sequence([
@@ -2224,10 +2829,9 @@ class GameScene: SKScene {
             SKAction.fadeIn(withDuration: 3.0)
         ]))
 
-        // Toolbox tillbaka — nollställ först så fadeBack startar rent
+        // Toolbox tillbaka — visa och fada in mjukt
         toolboxNode.removeAllActions()
-        toolboxNode.alpha = 0
-        toolboxNode.blendMode = .alpha
+        toolboxNode.isHidden = false
         toolboxNode.run(SKAction.sequence([
             SKAction.wait(forDuration: 2.0),
             SKAction.run { [weak self] in self?.toolboxNode.fadeBack() }
@@ -2313,9 +2917,14 @@ class GameScene: SKScene {
             let tappedHammer = tappedNodes.contains(where: { $0.name == "hammer" || $0.name == "hammerClone" })
             guard tappedHammer else { break }
 
-            // Paradflödet (tavlan på plats, bara efter peekABoo klar)
+            // Paradflödet (tavlan på plats)
             if portraitStep == 3 {
-                guard hammerNode.action(forKey: "peekABoo") == nil else { break }
+                // Blockera alla tap under pågående animationer
+                guard hammerNode.action(forKey: "peekABoo") == nil,
+                      hammerNode.action(forKey: "parade") == nil,
+                      hammerNode.action(forKey: "waveBye") == nil,
+                      hammerNode.action(forKey: "quickStrike") == nil,
+                      hammerNode.action(forKey: "comeback") == nil else { break }
                 switch paradePhase {
                 case 0: startHammerParade()
                 case 1: startHammerCarousel()
@@ -2328,7 +2937,8 @@ class GameScene: SKScene {
             // Tavelflödet — bara om alla animationer är klara
             guard hammerNode.action(forKey: "peekABoo") == nil,
                   hammerNode.action(forKey: "quickStrike") == nil,
-                  hammerNode.action(forKey: "comeback") == nil else { break }
+                  hammerNode.action(forKey: "comeback") == nil,
+                  hammerNode.action(forKey: "waveBye") == nil else { break }
             if portraitStep == 0 {
                 startPortraitSequence()
             } else if portraitStep == 1 {
