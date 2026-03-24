@@ -1646,6 +1646,16 @@ class GameScene: SKScene {
                 breatheDown.timingMode = .easeInEaseOut
                 deer.run(SKAction.repeatForever(SKAction.sequence([breatheUp, breatheDown])), withKey: "deerBreathe")
 
+                // Sällsynt slumpmässig blink
+                let normalTex = SKTexture(imageNamed: "deer1_head")
+                let blinkTex = SKTexture(imageNamed: "deer1_head_blink")
+                head.run(SKAction.repeatForever(SKAction.sequence([
+                    SKAction.wait(forDuration: 4.0, withRange: 3.0),
+                    SKAction.setTexture(blinkTex, resize: false),
+                    SKAction.wait(forDuration: 0.12),
+                    SKAction.setTexture(normalTex, resize: false),
+                ])), withKey: "idleBlink")
+
                 // Outer glow (samma stil som tavlan)
                 let deerGlow = SKEffectNode()
                 deerGlow.shouldRasterize = true
@@ -1702,6 +1712,7 @@ class GameScene: SKScene {
 
         // Nollställ huvud (anchorPoint vid nacken)
         deerHead?.removeAllActions()
+        deerHead?.texture = SKTexture(imageNamed: "deer1_head")
         deerHead?.position = CGPoint(x: 283, y: 172)
         deerHead?.zRotation = 0
 
@@ -1750,6 +1761,148 @@ class GameScene: SKScene {
 
         isDeerDancing = true
 
+        // Maskros-fröställning — 9 maskrosor i ring som snurrar
+        // Outer glow på hela karusellen (samma stil som tavlan)
+        let maskrosGlow = SKEffectNode()
+        maskrosGlow.shouldRasterize = true
+        maskrosGlow.filter = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 25.0])
+        maskrosGlow.position = CGPoint(x: 50, y: -750)
+        maskrosGlow.zPosition = 19
+        maskrosGlow.alpha = 0
+        maskrosGlow.name = "maskrosGlow"
+        deer.addChild(maskrosGlow)
+
+        let maskrosCarousel = SKNode()
+        maskrosCarousel.position = CGPoint(x: 50, y: -750)  // vid hovarna
+        maskrosCarousel.zPosition = 20
+        maskrosCarousel.alpha = 0
+        maskrosCarousel.name = "maskrosCarousel"
+        deer.addChild(maskrosCarousel)
+
+        let maskrosNames = ["maskros1", "maskros2", "maskros3"]
+        let count = 9
+        let radius: CGFloat = 0
+        let angleStep = (.pi * 2) / CGFloat(count)
+
+        for i in 0..<count {
+            let angle = angleStep * CGFloat(i) - .pi / 2
+
+            // Container per maskros — för individuell vickning
+            let container = SKNode()
+            container.position = CGPoint(x: cos(angle) * radius, y: sin(angle) * radius)
+            container.name = "maskrosItem"
+            maskrosCarousel.addChild(container)
+
+            // Inverterad maskros via CIColorInvert
+            let invertNode = SKEffectNode()
+            invertNode.shouldRasterize = true
+            invertNode.filter = CIFilter(name: "CIColorInvert")
+            let m = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+            m.zRotation = angle - .pi / 2  // stjälken pekar inåt
+            m.setScale(1.0)
+            m.anchorPoint = CGPoint(x: 0.5, y: 0.0)  // pivot vid stjälkens bas
+            invertNode.addChild(m)
+            container.addChild(invertNode)
+
+            // Outer glow
+            let glow = SKEffectNode()
+            glow.shouldRasterize = true
+            glow.filter = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 14.0])
+            glow.zPosition = -1
+
+            let glowSprite = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+            glowSprite.zRotation = angle - .pi / 2
+            glowSprite.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+            glowSprite.setScale(1.1)
+            glowSprite.colorBlendFactor = 1.0
+            glowSprite.color = .white
+            glowSprite.alpha = 0.85
+            glow.addChild(glowSprite)
+            container.addChild(glow)
+
+            // Individuell vickning — varje maskros vaggar från basen
+            let delay = Double(i) * 0.15
+            let wiggleAmount: CGFloat = CGFloat.random(in: 0.08...0.15)
+            let wiggleSpeed = TimeInterval.random(in: 0.6...1.0)
+            let wiggleR = SKAction.rotate(byAngle: wiggleAmount, duration: wiggleSpeed)
+            wiggleR.timingMode = .easeInEaseOut
+            let wiggleL = SKAction.rotate(byAngle: -wiggleAmount * 2, duration: wiggleSpeed * 2)
+            wiggleL.timingMode = .easeInEaseOut
+            let wiggleBack = SKAction.rotate(byAngle: wiggleAmount, duration: wiggleSpeed)
+            wiggleBack.timingMode = .easeInEaseOut
+
+            invertNode.run(SKAction.sequence([
+                SKAction.wait(forDuration: delay),
+                SKAction.repeatForever(SKAction.sequence([wiggleR, wiggleL, wiggleBack]))
+            ]), withKey: "maskrosWiggle")
+        }
+
+        // Bygg glow-kopia av alla maskrosor (vit, blurrad)
+        for i in 0..<count {
+            let angle = angleStep * CGFloat(i) - .pi / 2
+            let g = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+            g.position = CGPoint(x: cos(angle) * radius, y: sin(angle) * radius)
+            g.zRotation = angle - .pi / 2
+            g.setScale(1.1)
+            g.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+            g.colorBlendFactor = 1.0
+            g.color = .white
+            maskrosGlow.addChild(g)
+        }
+
+        // Pulserande shimmer på glowen (samma som tavlan)
+        let shimmer = SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.9, duration: 1.2),
+            SKAction.fadeAlpha(to: 0.4, duration: 1.0),
+            SKAction.fadeAlpha(to: 1.0, duration: 0.8),
+            SKAction.fadeAlpha(to: 0.35, duration: 1.4)
+        ])
+
+        // Fada in → stanna → blås bort som fröställning
+        maskrosCarousel.run(SKAction.fadeAlpha(to: 1.0, duration: 1.0))
+        maskrosGlow.run(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.8, duration: 1.0),
+            SKAction.repeatForever(shimmer)
+        ]))
+
+        // Efter 3.5s: blås bort alla maskrosor åt höger (som vinden tar dem)
+        maskrosCarousel.run(SKAction.sequence([
+            SKAction.wait(forDuration: 3.5),
+            SKAction.run {
+                maskrosCarousel.enumerateChildNodes(withName: "maskrosItem") { container, _ in
+                    // Varje maskros blåser iväg åt höger-uppåt med slumpmässig spridning
+                    let windX = CGFloat.random(in: 400...900)
+                    let windY = CGFloat.random(in: 100...500)
+                    let spinAngle = CGFloat.random(in: 2...6) * (Bool.random() ? 1 : -1)
+                    let duration = TimeInterval.random(in: 1.2...2.5)
+                    let delay = TimeInterval.random(in: 0...0.6)
+
+                    container.run(SKAction.sequence([
+                        SKAction.wait(forDuration: delay),
+                        SKAction.group([
+                            SKAction.moveBy(x: windX, y: windY, duration: duration),
+                            SKAction.rotate(byAngle: spinAngle, duration: duration),
+                            SKAction.scale(to: 0.3, duration: duration),
+                            SKAction.sequence([
+                                SKAction.wait(forDuration: duration * 0.5),
+                                SKAction.fadeOut(withDuration: duration * 0.5),
+                            ])
+                        ])
+                    ]))
+                }
+            },
+            // Ta bort karusellen efter att alla blåst bort
+            SKAction.wait(forDuration: 3.5),
+            SKAction.removeFromParent()
+        ]))
+
+        // Glowen fadear ut samtidigt
+        maskrosGlow.run(SKAction.sequence([
+            SKAction.wait(forDuration: 3.5),
+            SKAction.fadeOut(withDuration: 1.0),
+            SKAction.removeFromParent()
+        ]))
+
         // Stoppa idle-animationer och glow
         deer.removeAction(forKey: "deerBreathe")
         deerGlow?.removeAllActions()
@@ -1776,6 +1929,17 @@ class GameScene: SKScene {
 
         let beat: TimeInterval = 0.22
         let mBeat: TimeInterval = 0.35
+
+        // Blink-texturer för danssekvensen
+        let normalTex = SKTexture(imageNamed: "deer1_head")
+        let blinkTex = SKTexture(imageNamed: "deer1_head_blink")
+        func quickBlink() -> SKAction {
+            SKAction.sequence([
+                SKAction.setTexture(blinkTex, resize: false),
+                SKAction.wait(forDuration: 0.1),
+                SKAction.setTexture(normalTex, resize: false),
+            ])
+        }
         let deg15: CGFloat = 0.26
         let deg30: CGFloat = 0.52
         let deg45: CGFloat = 0.79
@@ -1894,6 +2058,11 @@ class GameScene: SKScene {
                 headNod(), headNod(), headNod(), headNod(),
                 headNod(), headNod(), headNod(), headNod()
             ]), withKey: "headPhase")
+            // Blink på beat 3 och 7 (synkat med bounce)
+            head.run(SKAction.sequence([
+                SKAction.wait(forDuration: beat * 2), quickBlink(),
+                SKAction.wait(forDuration: beat * 4), quickBlink(),
+            ]), withKey: "blinkPhase")
             tail.run(SKAction.sequence([
                 tailWag(), tailWag(), tailWag(), tailWag(),
                 tailWag(), tailWag(), tailWag(), tailWag()
@@ -2016,6 +2185,11 @@ class GameScene: SKScene {
                 headCircle(), headCircle(), headCircle(),
                 headCircle(), headCircle(), headCircle()
             ]), withKey: "headPhase")
+            // Blink mitt i varje riktningsbyte
+            head.run(SKAction.sequence([
+                SKAction.wait(forDuration: mBeat * 3), quickBlink(),
+                SKAction.wait(forDuration: mBeat * 5), quickBlink(),
+            ]), withKey: "blinkPhase")
 
             // Kropp: lätt lean
             body.run(SKAction.sequence([
@@ -2154,6 +2328,11 @@ class GameScene: SKScene {
             head.run(SKAction.sequence([
                 SKAction.wait(forDuration: beat * 7)
             ]), withKey: "headPhase")
+            // Blink vid toppen av stegringen
+            head.run(SKAction.sequence([
+                SKAction.wait(forDuration: beat * 2.5), quickBlink(),
+                SKAction.wait(forDuration: beat * 2), quickBlink(),
+            ]), withKey: "blinkPhase")
 
             // Svans: lyfts uppåt (pendlar kring fästpunkten)
             tail.run(SKAction.sequence([
@@ -2278,6 +2457,12 @@ class GameScene: SKScene {
                 SKAction.moveBy(x: -7, y: -8, duration: beat * 0.5),
                 SKAction.moveBy(x: -8, y: -45, duration: beat * 0.5)
             ]), withKey: "headPhase")
+            // Blink vid toppen + mitt i krats
+            head.run(SKAction.sequence([
+                SKAction.wait(forDuration: beat * 2), quickBlink(),
+                SKAction.wait(forDuration: beat * 3), quickBlink(),
+                SKAction.wait(forDuration: beat * 2), quickBlink(),
+            ]), withKey: "blinkPhase")
 
             // Svans: glad hög viftning
             tail.run(SKAction.sequence([
@@ -2408,6 +2593,12 @@ class GameScene: SKScene {
                 headNod, headNod, headNod, headNod,
                 headNod, headNod, headNod, headNod
             ]), withKey: "headPhase")
+            // Blink synkad med knälyft (beat 2, 5, 8)
+            head.run(SKAction.sequence([
+                SKAction.wait(forDuration: rb * 1.5), quickBlink(),
+                SKAction.wait(forDuration: rb * 3), quickBlink(),
+                SKAction.wait(forDuration: rb * 2.5), quickBlink(),
+            ]), withKey: "blinkPhase")
 
             // Svans: mjuk viftning
             let wagRight = SKAction.rotate(toAngle: 0.15, duration: rb * 0.35)
@@ -2534,7 +2725,7 @@ class GameScene: SKScene {
         func stopPhaseActions() {
             let phaseKeys = ["deerPhase", "fl1Phase", "fl2Phase", "bl1Phase", "bl2Phase",
                              "fl1dPhase", "fl2dPhase", "bl1dPhase", "bl2dPhase",
-                             "headPhase", "tailPhase", "bodyPhase", "danceBreath"]
+                             "headPhase", "tailPhase", "bodyPhase", "danceBreath", "blinkPhase"]
             let nodes: [SKNode?] = [deer, fl1Grp, fl2Grp, bl1Grp, bl2Grp,
                                      fl1Down, fl2Down, bl1Down, bl2Down,
                                      head, tail, body]
@@ -2663,6 +2854,16 @@ class GameScene: SKScene {
                 self.isDeerDancing = false
                 self.isDeerPostDance = true
 
+                // Fada ut maskros-karusellen + glow
+                for name in ["maskrosCarousel", "maskrosGlow"] {
+                    if let node = deer.childNode(withName: name) {
+                        node.run(SKAction.sequence([
+                            SKAction.fadeOut(withDuration: 1.5),
+                            SKAction.removeFromParent()
+                        ]))
+                    }
+                }
+
                 // Andning — kroppen
                 let breatheUp = SKAction.scale(to: baseScale * 1.015, duration: 1.4)
                 breatheUp.timingMode = .easeInEaseOut
@@ -2677,6 +2878,17 @@ class GameScene: SKScene {
                 let nodUp = SKAction.moveBy(x: 0, y: 12, duration: 0.8)
                 nodUp.timingMode = .easeInEaseOut
                 head.run(SKAction.repeatForever(SKAction.sequence([nodDown, nodUp])), withKey: "idleNod")
+
+                // Slumpmässig blink
+                let normalTex = SKTexture(imageNamed: "deer1_head")
+                let blinkTex = SKTexture(imageNamed: "deer1_head_blink")
+                let blink = SKAction.repeatForever(SKAction.sequence([
+                    SKAction.wait(forDuration: 5.0, withRange: 4.0),
+                    SKAction.setTexture(blinkTex, resize: false),
+                    SKAction.wait(forDuration: 0.12),
+                    SKAction.setTexture(normalTex, resize: false),
+                ]))
+                head.run(blink, withKey: "idleBlink")
 
                 // Glad svansviftning
                 guard let tail = self.deerTail else { return }
