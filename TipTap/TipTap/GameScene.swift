@@ -75,6 +75,16 @@ class GameScene: SKScene {
         setupToolbox()
         setupHammer()
         setupDebugReset()
+        setupGokur()
+    }
+
+    private func setupGokur() {
+        let gokur = SKSpriteNode(imageNamed: "gokur_open")
+        gokur.position = CGPoint(x: 2139, y: 1421)
+        gokur.zPosition = 5
+        gokur.setScale(0.421)
+        gokur.name = "gokur"
+        addChild(gokur)
     }
 
     private func setupHall() {
@@ -1680,8 +1690,666 @@ class GameScene: SKScene {
                 deerGlow.run(SKAction.repeatForever(shimmer), withKey: "deerShimmer")
 
                 self.deerGlow = deerGlow
+
+                // Maskros-fröställning vid hovarna
+                self.spawnMaskrosBoll(on: deer)
+                self.spawnExtraMaskrosBollar(on: deer)
+                self.spawnTeaserMaskrosor(on: deer)
             }
         ]))
+    }
+
+    // MARK: - Maskros-fröställning
+
+    private func spawnMaskrosBoll(on deer: SKNode) {
+        let maskrosGlow = SKEffectNode()
+        maskrosGlow.shouldRasterize = true
+        maskrosGlow.filter = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 25.0])
+        maskrosGlow.position = CGPoint(x: 50, y: -1100)
+        maskrosGlow.zPosition = 19
+        maskrosGlow.alpha = 0
+        maskrosGlow.name = "maskrosGlow"
+        deer.addChild(maskrosGlow)
+
+        let maskrosCarousel = SKNode()
+        maskrosCarousel.position = CGPoint(x: 50, y: -1100)
+        maskrosCarousel.zPosition = 20
+        maskrosCarousel.alpha = 0
+        maskrosCarousel.name = "maskrosCarousel"
+        deer.addChild(maskrosCarousel)
+
+        let maskrosNames = ["maskros1", "maskros2", "maskros3"]
+        let count = 9
+        let radius: CGFloat = 0
+        let angleStep = (.pi * 2) / CGFloat(count)
+
+        for i in 0..<count {
+            let angle = angleStep * CGFloat(i) - .pi / 2
+
+            let container = SKNode()
+            container.position = CGPoint(x: cos(angle) * radius, y: sin(angle) * radius)
+            container.name = "maskrosItem"
+            maskrosCarousel.addChild(container)
+
+            let invertNode = SKEffectNode()
+            invertNode.shouldRasterize = true
+            invertNode.filter = CIFilter(name: "CIColorInvert")
+            let m = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+            m.zRotation = angle - .pi / 2
+            m.setScale(1.0)
+            m.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+            invertNode.addChild(m)
+            container.addChild(invertNode)
+
+            let glow = SKEffectNode()
+            glow.shouldRasterize = true
+            glow.filter = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 14.0])
+            glow.zPosition = -1
+            let glowSprite = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+            glowSprite.zRotation = angle - .pi / 2
+            glowSprite.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+            glowSprite.setScale(1.1)
+            glowSprite.colorBlendFactor = 1.0
+            glowSprite.color = .white
+            glowSprite.alpha = 0.85
+            glow.addChild(glowSprite)
+            container.addChild(glow)
+
+            let delay = Double(i) * 0.08
+            let wiggleAmount: CGFloat = CGFloat.random(in: 0.10...0.20)
+            let wiggleSpeed = TimeInterval.random(in: 0.3...0.5)
+            let wiggleR = SKAction.rotate(byAngle: wiggleAmount, duration: wiggleSpeed)
+            wiggleR.timingMode = .easeInEaseOut
+            let wiggleL = SKAction.rotate(byAngle: -wiggleAmount * 2, duration: wiggleSpeed * 2)
+            wiggleL.timingMode = .easeInEaseOut
+            let wiggleBack = SKAction.rotate(byAngle: wiggleAmount, duration: wiggleSpeed)
+            wiggleBack.timingMode = .easeInEaseOut
+            invertNode.run(SKAction.sequence([
+                SKAction.wait(forDuration: delay),
+                SKAction.repeatForever(SKAction.sequence([wiggleR, wiggleL, wiggleBack]))
+            ]), withKey: "maskrosWiggle")
+        }
+
+        // Glow-kopior
+        for i in 0..<count {
+            let angle = angleStep * CGFloat(i) - .pi / 2
+            let g = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+            g.position = CGPoint(x: cos(angle) * radius, y: sin(angle) * radius)
+            g.zRotation = angle - .pi / 2
+            g.setScale(1.1)
+            g.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+            g.colorBlendFactor = 1.0
+            g.color = .white
+            maskrosGlow.addChild(g)
+        }
+
+        let shimmer = SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.9, duration: 1.2),
+            SKAction.fadeAlpha(to: 0.4, duration: 1.0),
+            SKAction.fadeAlpha(to: 1.0, duration: 0.8),
+            SKAction.fadeAlpha(to: 0.35, duration: 1.4)
+        ])
+
+        // Fada in och vicka
+        maskrosCarousel.run(SKAction.fadeAlpha(to: 1.0, duration: 0.5))
+        maskrosGlow.run(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.8, duration: 0.5),
+            SKAction.repeatForever(shimmer)
+        ]))
+    }
+
+    private func spawnExtraMaskrosBollar(on deer: SKNode) {
+        let maskrosNames = ["maskros1", "maskros2", "maskros3"]
+        // Första vågen: 10-12 st, sedan andra vågen: dubbelt så många
+        let wave1Count = Int.random(in: 10...12)
+        let wave2Count = wave1Count * 2
+        let extraCount = wave1Count + wave2Count
+        let angleStep = (.pi * 2) / CGFloat(9)  // samma som originalet
+
+        for b in 0..<extraCount {
+            let isWave2 = b >= wave1Count
+            let spawnDelay = isWave2
+                ? TimeInterval.random(in: 2.5...4.0)   // andra vågen: mer fördröjning
+                : TimeInterval.random(in: 0.1...1.2)    // första vågen
+            let scale = isWave2
+                ? CGFloat.random(in: 0.3...0.8)         // andra vågen: mer variation
+                : CGFloat.random(in: 0.5...1.0)
+
+            // Bred spridning med mer åt vänster
+            let spreadR: CGFloat = isWave2 ? 1500 : 1300
+            let spreadL: CGFloat = isWave2 ? 1500 : 1300
+            let posX = CGFloat.random(in: -spreadL...spreadR)
+            let posY = CGFloat.random(in: -1600 ... -600)
+
+            let bollNode = SKNode()
+            bollNode.position = CGPoint(x: posX, y: posY)
+            bollNode.setScale(0.0)  // startar osynlig, poppar upp
+            bollNode.zPosition = Int.random(in: 1...100) <= 35 ? 25 : 3  // 65% bakom, 35% framför  // framför eller bakom rådjuret
+            bollNode.alpha = 0
+            bollNode.name = "extraMaskros"
+            deer.addChild(bollNode)
+
+            // Glow bakom
+            let bollGlow = SKEffectNode()
+            bollGlow.shouldRasterize = true
+            bollGlow.filter = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 20.0])
+            bollGlow.zPosition = -1
+            bollGlow.alpha = 0.7
+            bollNode.addChild(bollGlow)
+
+            // 9 maskrosor per boll
+            for i in 0..<9 {
+                let angle = angleStep * CGFloat(i) - .pi / 2
+
+                let container = SKNode()
+                container.name = "maskrosItem"
+                bollNode.addChild(container)
+
+                let invertNode = SKEffectNode()
+                invertNode.shouldRasterize = true
+                invertNode.filter = CIFilter(name: "CIColorInvert")
+                let m = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+                m.zRotation = angle - .pi / 2
+                m.setScale(1.0)
+                m.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+                invertNode.addChild(m)
+                container.addChild(invertNode)
+
+                // Individuell glow per stjälk
+                let glow = SKEffectNode()
+                glow.shouldRasterize = true
+                glow.filter = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 14.0])
+                glow.zPosition = -1
+                let gs = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+                gs.zRotation = angle - .pi / 2
+                gs.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+                gs.setScale(1.1)
+                gs.colorBlendFactor = 1.0
+                gs.color = .white
+                gs.alpha = 0.85
+                glow.addChild(gs)
+                container.addChild(glow)
+
+                // Vickning
+                let wiggleAmount: CGFloat = CGFloat.random(in: 0.10...0.20)
+                let wiggleSpeed = TimeInterval.random(in: 0.3...0.5)
+                let wR = SKAction.rotate(byAngle: wiggleAmount, duration: wiggleSpeed)
+                wR.timingMode = .easeInEaseOut
+                let wL = SKAction.rotate(byAngle: -wiggleAmount * 2, duration: wiggleSpeed * 2)
+                wL.timingMode = .easeInEaseOut
+                let wB = SKAction.rotate(byAngle: wiggleAmount, duration: wiggleSpeed)
+                wB.timingMode = .easeInEaseOut
+                invertNode.run(SKAction.sequence([
+                    SKAction.wait(forDuration: Double(i) * 0.08),
+                    SKAction.repeatForever(SKAction.sequence([wR, wL, wB]))
+                ]), withKey: "maskrosWiggle")
+
+                // Glow-kopia för bollGlow
+                let gc = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+                gc.zRotation = angle - .pi / 2
+                gc.setScale(1.1)
+                gc.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+                gc.colorBlendFactor = 1.0
+                gc.color = .white
+                bollGlow.addChild(gc)
+            }
+
+            // Shimmer på glowen
+            let shimmer = SKAction.sequence([
+                SKAction.fadeAlpha(to: 0.9, duration: CGFloat.random(in: 0.8...1.4)),
+                SKAction.fadeAlpha(to: 0.4, duration: CGFloat.random(in: 0.7...1.2)),
+                SKAction.fadeAlpha(to: 1.0, duration: CGFloat.random(in: 0.6...1.0)),
+                SKAction.fadeAlpha(to: 0.35, duration: CGFloat.random(in: 0.9...1.5))
+            ])
+            bollGlow.run(SKAction.repeatForever(shimmer))
+
+            // Poppa upp! Studsig overshoot som en blomma som slår ut
+            let popScale = scale
+            bollNode.run(SKAction.sequence([
+                SKAction.wait(forDuration: spawnDelay),
+                SKAction.group([
+                    SKAction.fadeAlpha(to: 1.0, duration: 0.08),
+                    SKAction.sequence([
+                        SKAction.scale(to: popScale * 1.3, duration: 0.12),
+                        SKAction.scale(to: popScale * 0.85, duration: 0.08),
+                        SKAction.scale(to: popScale * 1.1, duration: 0.06),
+                        SKAction.scale(to: popScale, duration: 0.06),
+                    ]),
+                    SKAction.moveBy(x: 0, y: CGFloat.random(in: 8...20), duration: 0.12),
+                ])
+            ]))
+
+            // Individuell pulsering
+            let pulseSpeed = TimeInterval.random(in: 0.5...1.0)
+            let pulseAmt = popScale * CGFloat.random(in: 0.06...0.14)
+            let pUp = SKAction.scale(to: popScale + pulseAmt, duration: pulseSpeed)
+            pUp.timingMode = .easeInEaseOut
+            let pDown = SKAction.scale(to: popScale - pulseAmt * 0.5, duration: pulseSpeed)
+            pDown.timingMode = .easeInEaseOut
+            bollNode.run(SKAction.sequence([
+                SKAction.wait(forDuration: spawnDelay + 0.35),
+                SKAction.repeatForever(SKAction.sequence([pUp, pDown]))
+            ]), withKey: "bollPulse")
+        }
+    }
+
+    private func blowAwayMaskros() {
+        guard let deer = deerNode else { return }
+
+        // Blås bort originalbollen först (0.5s fördröjning)
+        if let carousel = deer.childNode(withName: "maskrosCarousel"),
+           let glow = deer.childNode(withName: "maskrosGlow") {
+            blowAwayBoll(carousel, glow: glow, delay: 0.5)
+        }
+
+        // Blås bort extra bollar en och en med korta intervall, 1s efter originalet
+        var extraDelay: TimeInterval = 1.5
+        deer.enumerateChildNodes(withName: "extraMaskros") { node, _ in
+            let delay = extraDelay
+            extraDelay += TimeInterval.random(in: 0.08...0.2)
+
+            // Hitta bollens glow (första SKEffectNode-barnet)
+            node.run(SKAction.sequence([
+                SKAction.wait(forDuration: delay),
+                SKAction.run { [weak self] in
+                    self?.blowAwayExtraBoll(node)
+                }
+            ]))
+        }
+    }
+
+    /// Blåser bort en hel boll (carousel + glow) — frön åt alla håll (stamp, inte vind)
+    private func blowAwayBoll(_ carousel: SKNode, glow: SKNode, delay: TimeInterval) {
+        carousel.run(SKAction.sequence([
+            SKAction.wait(forDuration: delay),
+            // Glad puff innan explosion
+            SKAction.scale(to: 1.25, duration: 0.07),
+            SKAction.scale(to: 0.9, duration: 0.05),
+            SKAction.scale(to: 1.0, duration: 0.04),
+            SKAction.run {
+                carousel.enumerateChildNodes(withName: "maskrosItem") { container, _ in
+                    let baseAngle = CGFloat.random(in: 0...(.pi * 2))
+                    let distance = CGFloat.random(in: 350...900)
+                    let duration = TimeInterval.random(in: 0.8...1.4)
+                    let itemDelay = TimeInterval.random(in: 0...0.2)
+
+                    // Dansande spiral-bana
+                    let mid1X = cos(baseAngle + 0.5) * distance * 0.3
+                    let mid1Y = sin(baseAngle + 0.5) * distance * 0.3 + CGFloat.random(in: 50...130)
+                    let mid2X = cos(baseAngle - 0.4) * distance * 0.7
+                    let mid2Y = sin(baseAngle - 0.4) * distance * 0.7 + CGFloat.random(in: 80...220)
+                    let endX = cos(baseAngle) * distance
+                    let endY = sin(baseAngle) * distance + CGFloat.random(in: 100...300)
+
+                    let step1 = duration * 0.3
+                    let step2 = duration * 0.35
+                    let step3 = duration * 0.35
+
+                    let curve = SKAction.sequence([
+                        SKAction.moveBy(x: mid1X, y: mid1Y, duration: step1),
+                        SKAction.moveBy(x: mid2X - mid1X, y: mid2Y - mid1Y, duration: step2),
+                        SKAction.moveBy(x: endX - mid2X, y: endY - mid2Y, duration: step3),
+                    ])
+                    let spin = SKAction.rotate(byAngle: CGFloat.random(in: 4...10) * (Bool.random() ? 1 : -1), duration: duration)
+                    let shrink = SKAction.sequence([
+                        SKAction.scale(to: 1.2, duration: duration * 0.12),
+                        SKAction.scale(to: 0.15, duration: duration * 0.88),
+                    ])
+                    let fade = SKAction.sequence([
+                        SKAction.wait(forDuration: duration * 0.5),
+                        SKAction.fadeOut(withDuration: duration * 0.5),
+                    ])
+
+                    container.run(SKAction.sequence([
+                        SKAction.wait(forDuration: itemDelay),
+                        SKAction.group([curve, spin, shrink, fade])
+                    ]))
+                }
+            },
+            SKAction.wait(forDuration: 2.0),
+            SKAction.removeFromParent()
+        ]))
+
+        glow.run(SKAction.sequence([
+            SKAction.wait(forDuration: delay),
+            SKAction.fadeOut(withDuration: 0.6),
+            SKAction.removeFromParent()
+        ]))
+    }
+
+    /// Blåser bort en extra maskrosboll — frön åt alla håll
+    private func blowAwayExtraBoll(_ boll: SKNode) {
+        // Liten glad skakning innan fröna flyger — som ett "poff!"
+        boll.run(SKAction.sequence([
+            SKAction.scale(to: boll.xScale * 1.2, duration: 0.06),
+            SKAction.scale(to: boll.xScale * 0.9, duration: 0.04),
+            SKAction.scale(to: boll.xScale, duration: 0.03),
+        ]))
+
+        boll.enumerateChildNodes(withName: "maskrosItem") { container, _ in
+            // Spiralande bana — inte rak linje, mer som ett dansande frö
+            let baseAngle = CGFloat.random(in: 0...(.pi * 2))
+            let distance = CGFloat.random(in: 300...900)
+            let duration = TimeInterval.random(in: 0.8...1.4)
+            let itemDelay = TimeInterval.random(in: 0...0.12)
+
+            // Kurvad bana i tre steg — fröet dansar iväg
+            let mid1X = cos(baseAngle + 0.4) * distance * 0.3
+            let mid1Y = sin(baseAngle + 0.4) * distance * 0.3 + CGFloat.random(in: 40...120)
+            let mid2X = cos(baseAngle - 0.3) * distance * 0.7
+            let mid2Y = sin(baseAngle - 0.3) * distance * 0.7 + CGFloat.random(in: 80...200)
+            let endX = cos(baseAngle) * distance
+            let endY = sin(baseAngle) * distance + CGFloat.random(in: 100...300)
+
+            let step1 = duration * 0.3
+            let step2 = duration * 0.35
+            let step3 = duration * 0.35
+
+            let curve = SKAction.sequence([
+                SKAction.moveBy(x: mid1X, y: mid1Y, duration: step1),
+                SKAction.moveBy(x: mid2X - mid1X, y: mid2Y - mid1Y, duration: step2),
+                SKAction.moveBy(x: endX - mid2X, y: endY - mid2Y, duration: step3),
+            ])
+
+            // Piruett + pulsande krympning
+            let spin = SKAction.rotate(byAngle: CGFloat.random(in: 4...10) * (Bool.random() ? 1 : -1), duration: duration)
+            let shrink = SKAction.sequence([
+                SKAction.scale(to: 1.15, duration: duration * 0.15),  // liten puff uppåt
+                SKAction.scale(to: 0.15, duration: duration * 0.85),
+            ])
+            let fade = SKAction.sequence([
+                SKAction.wait(forDuration: duration * 0.5),
+                SKAction.fadeOut(withDuration: duration * 0.5),
+            ])
+
+            container.run(SKAction.sequence([
+                SKAction.wait(forDuration: itemDelay),
+                SKAction.group([curve, spin, shrink, fade])
+            ]))
+        }
+
+        boll.run(SKAction.sequence([
+            SKAction.wait(forDuration: 2.0),
+            SKAction.removeFromParent()
+        ]))
+    }
+
+    // MARK: - Teaser-maskrosor (innan dansen, lockar barnet)
+
+    private func spawnTeaserMaskrosor(on deer: SKNode) {
+        let maskrosNames = ["maskros1", "maskros2", "maskros3"]
+
+        // Spawna enskilda bollar med slumpmässiga intervall
+        let teaserAction = SKAction.repeatForever(SKAction.sequence([
+            SKAction.wait(forDuration: 2.5, withRange: 3.0),  // var 1–4s
+            SKAction.run { [weak self] in
+                guard let self, !self.isDeerDancing, self.deerNode != nil else { return }
+
+                let scale = CGFloat.random(in: 0.3...0.7)
+                let posX = CGFloat.random(in: -1400...1400)
+                let posY = CGFloat.random(in: -1600 ... -600)
+
+                let boll = SKNode()
+                boll.position = CGPoint(x: posX, y: posY)
+                boll.setScale(0.0)
+                boll.zPosition = Int.random(in: 1...100) <= 35 ? 25 : 3  // 65% bakom, 35% framför
+                boll.name = "teaserMaskros"
+                deer.addChild(boll)
+
+                let stemCount = Int.random(in: 4...7)
+                for i in 0..<stemCount {
+                    let angle = (.pi * 2) / CGFloat(stemCount) * CGFloat(i) - .pi / 2
+                    let container = SKNode()
+                    container.name = "maskrosItem"
+                    boll.addChild(container)
+
+                    let invertNode = SKEffectNode()
+                    invertNode.shouldRasterize = true
+                    invertNode.filter = CIFilter(name: "CIColorInvert")
+                    let m = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+                    m.zRotation = angle - .pi / 2
+                    m.setScale(1.0)
+                    m.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+                    invertNode.addChild(m)
+                    container.addChild(invertNode)
+
+                    let wa: CGFloat = CGFloat.random(in: 0.08...0.18)
+                    let ws = TimeInterval.random(in: 0.3...0.5)
+                    invertNode.run(SKAction.repeatForever(SKAction.sequence([
+                        SKAction.rotate(byAngle: wa, duration: ws),
+                        SKAction.rotate(byAngle: -wa * 2, duration: ws * 2),
+                        SKAction.rotate(byAngle: wa, duration: ws),
+                    ])))
+                }
+
+                // Poppa upp, lev en stund, blås bort mjukt
+                let aliveTime = TimeInterval.random(in: 1.5...3.5)
+                let blowDur = TimeInterval.random(in: 0.8...1.2)
+
+                boll.run(SKAction.sequence([
+                    // Pop in
+                    SKAction.group([
+                        SKAction.fadeAlpha(to: 1.0, duration: 0.06),
+                        SKAction.sequence([
+                            SKAction.scale(to: scale * 1.25, duration: 0.1),
+                            SKAction.scale(to: scale * 0.88, duration: 0.07),
+                            SKAction.scale(to: scale, duration: 0.05),
+                        ]),
+                    ]),
+                    // Vicka och vänta
+                    SKAction.wait(forDuration: aliveTime),
+                    // Mjuk bortblåsning
+                    SKAction.run {
+                        boll.enumerateChildNodes(withName: "maskrosItem") { container, _ in
+                            let ba = CGFloat.random(in: 0...(.pi * 2))
+                            let dist = CGFloat.random(in: 150...400)
+                            let dx = cos(ba) * dist
+                            let dy = sin(ba) * dist + CGFloat.random(in: 30...100)
+                            container.run(SKAction.group([
+                                SKAction.moveBy(x: dx, y: dy, duration: blowDur),
+                                SKAction.rotate(byAngle: CGFloat.random(in: 2...5) * (Bool.random() ? 1 : -1), duration: blowDur),
+                                SKAction.scale(to: 0.15, duration: blowDur),
+                                SKAction.sequence([
+                                    SKAction.wait(forDuration: blowDur * 0.4),
+                                    SKAction.fadeOut(withDuration: blowDur * 0.6),
+                                ])
+                            ]))
+                        }
+                    },
+                    SKAction.wait(forDuration: blowDur + 0.3),
+                    SKAction.removeFromParent()
+                ]))
+            }
+        ]))
+        deer.run(teaserAction, withKey: "teaserMaskros")
+    }
+
+    // MARK: - Maskros-storm (kontinuerlig under dansen)
+
+    private func startMaskrosStorm(on deer: SKNode) {
+        let maskrosNames = ["maskros1", "maskros2", "maskros3"]
+        let angleStep = (.pi * 2) / CGFloat(9)
+
+        // Spawna en enskild maskrosboll som poppar upp och snabbt blåser bort
+        func spawnAndBlow() {
+            guard self.isDeerDancing else { return }
+
+            let scale = CGFloat.random(in: 0.25...0.85)
+            let posX = CGFloat.random(in: -1500...1500)
+            let posY = CGFloat.random(in: -1600 ... -600)
+
+            let boll = SKNode()
+            boll.position = CGPoint(x: posX, y: posY)
+            boll.setScale(0.0)
+            // Slumpmässigt framför eller bakom rådjuret
+            boll.zPosition = Int.random(in: 1...100) <= 35 ? 25 : 3  // 65% bakom, 35% framför
+            boll.name = "stormMaskros"
+            deer.addChild(boll)
+
+            // Bygg bollen (förenklad — färre effekt-noder för prestanda)
+            let stemCount = Int.random(in: 5...9)
+            for i in 0..<stemCount {
+                let angle = (.pi * 2) / CGFloat(stemCount) * CGFloat(i) - .pi / 2
+                let container = SKNode()
+                container.name = "maskrosItem"
+                boll.addChild(container)
+
+                let invertNode = SKEffectNode()
+                invertNode.shouldRasterize = true
+                invertNode.filter = CIFilter(name: "CIColorInvert")
+                let m = SKSpriteNode(imageNamed: maskrosNames[i % 3])
+                m.zRotation = angle - .pi / 2
+                m.setScale(1.0)
+                m.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+                invertNode.addChild(m)
+                container.addChild(invertNode)
+
+                // Varje stjälk vickar, lever olika länge, och blåser bort individuellt
+                let wa: CGFloat = CGFloat.random(in: 0.12...0.25)
+                let ws = TimeInterval.random(in: 0.2...0.35)
+                let stemAlive = TimeInterval.random(in: 0.8...4.0)
+                let stemBlowDur = TimeInterval.random(in: 0.5...1.2)
+                let stemDelay = TimeInterval.random(in: 0...0.3)
+
+                let ba = CGFloat.random(in: 0...(.pi * 2))
+                let dist = CGFloat.random(in: 250...700)
+                let midX = cos(ba + 0.4) * dist * 0.35
+                let midY = sin(ba + 0.4) * dist * 0.35 + CGFloat.random(in: 30...120)
+                let endX = cos(ba) * dist
+                let endY = sin(ba) * dist + CGFloat.random(in: 60...200)
+
+                let curve = SKAction.sequence([
+                    SKAction.moveBy(x: midX, y: midY, duration: stemBlowDur * 0.35),
+                    SKAction.moveBy(x: endX - midX, y: endY - midY, duration: stemBlowDur * 0.65),
+                ])
+                let spinAway = SKAction.rotate(byAngle: CGFloat.random(in: 3...8) * (Bool.random() ? 1 : -1), duration: stemBlowDur)
+                let shrink = SKAction.sequence([
+                    SKAction.scale(to: 1.15, duration: stemBlowDur * 0.1),
+                    SKAction.scale(to: 0.1, duration: stemBlowDur * 0.9),
+                ])
+                let fade = SKAction.sequence([
+                    SKAction.wait(forDuration: stemBlowDur * 0.4),
+                    SKAction.fadeOut(withDuration: stemBlowDur * 0.6),
+                ])
+
+                container.run(SKAction.sequence([
+                    SKAction.wait(forDuration: stemDelay),
+                    // Vicka medan den lever
+                    SKAction.group([
+                        SKAction.repeat(SKAction.sequence([
+                            SKAction.rotate(byAngle: wa, duration: ws),
+                            SKAction.rotate(byAngle: -wa * 2, duration: ws * 2),
+                            SKAction.rotate(byAngle: wa, duration: ws),
+                        ]), count: max(1, Int(stemAlive / (ws * 4)))),
+                    ]),
+                    // Blås bort individuellt
+                    SKAction.group([curve, spinAway, shrink, fade]),
+                    SKAction.removeFromParent()
+                ]))
+            }
+
+            // Poppa upp bollen
+            let maxStemLife: TimeInterval = 4.5
+            boll.run(SKAction.sequence([
+                SKAction.group([
+                    SKAction.fadeAlpha(to: 1.0, duration: 0.06),
+                    SKAction.sequence([
+                        SKAction.scale(to: scale * 1.3, duration: 0.1),
+                        SKAction.scale(to: scale * 0.85, duration: 0.07),
+                        SKAction.scale(to: scale, duration: 0.05),
+                    ]),
+                ]),
+                // Vänta tills alla stjälkar blåst bort + marginal
+                SKAction.wait(forDuration: maxStemLife + 1.5),
+                SKAction.removeFromParent()
+            ]))
+
+            // Individuell pulsering under hela livstiden
+            let pulseSpeed = TimeInterval.random(in: 0.4...0.8)
+            let pulseAmount = scale * CGFloat.random(in: 0.08...0.18)
+            let pulseUp = SKAction.scale(to: scale + pulseAmount, duration: pulseSpeed)
+            pulseUp.timingMode = .easeInEaseOut
+            let pulseDown = SKAction.scale(to: scale - pulseAmount * 0.5, duration: pulseSpeed)
+            pulseDown.timingMode = .easeInEaseOut
+            boll.run(SKAction.repeatForever(SKAction.sequence([pulseUp, pulseDown])), withKey: "bollPulse")
+        }
+
+        // Starta storm-loopen — popp popp popp flax popp!
+        let stormAction = SKAction.repeatForever(SKAction.sequence([
+            SKAction.run {
+                spawnAndBlow()
+                // Ibland 2-3 extra samtidigt för burst-effekt
+                if Int.random(in: 0...2) == 0 { spawnAndBlow() }
+                if Int.random(in: 0...4) == 0 { spawnAndBlow() }
+            },
+            SKAction.wait(forDuration: 0.12, withRange: 0.16),  // 0.04–0.20s mellan varje
+        ]))
+        deer.run(stormAction, withKey: "maskrosStorm")
+    }
+
+    private func stopMaskrosStorm() {
+        deerNode?.removeAction(forKey: "maskrosStorm")
+    }
+
+    /// Alla maskrosbollar sveper vänster-höger-vänster under moonwalk
+    private func moonwalkMaskrosor(duration: TimeInterval) {
+        guard let deer = deerNode else { return }
+        let names = ["stormMaskros", "extraMaskros", "teaserMaskros"]
+        let swingDist: CGFloat = 180
+        let stepDur = duration / 3.0
+
+        let swingL = SKAction.moveBy(x: -swingDist, y: 0, duration: stepDur)
+        swingL.timingMode = .easeInEaseOut
+        let swingR = SKAction.moveBy(x: swingDist * 2, y: 0, duration: stepDur)
+        swingR.timingMode = .easeInEaseOut
+        let swingBack = SKAction.moveBy(x: -swingDist, y: 0, duration: stepDur)
+        swingBack.timingMode = .easeInEaseOut
+
+        for name in names {
+            deer.enumerateChildNodes(withName: name) { boll, _ in
+                // Individuell variation — lite olika avstånd och timing
+                let personalDist = swingDist * CGFloat.random(in: 0.6...1.4)
+                let personalDelay = TimeInterval.random(in: 0...0.3)
+
+                let pL = SKAction.moveBy(x: -personalDist, y: 0, duration: stepDur)
+                pL.timingMode = .easeInEaseOut
+                let pR = SKAction.moveBy(x: personalDist * 2, y: 0, duration: stepDur)
+                pR.timingMode = .easeInEaseOut
+                let pBack = SKAction.moveBy(x: -personalDist, y: 0, duration: stepDur)
+                pBack.timingMode = .easeInEaseOut
+
+                boll.run(SKAction.sequence([
+                    SKAction.wait(forDuration: personalDelay),
+                    pL, pR, pBack
+                ]), withKey: "moonSwing")
+            }
+        }
+    }
+
+    /// Alla synliga maskrosbollar snurrar och kompenserar deer-lyft vid stegring
+    private func spinAllMaskrosor() {
+        guard let deer = deerNode else { return }
+        let names = ["stormMaskros", "extraMaskros", "teaserMaskros"]
+
+        // Deer lyfter ~55-85px under stegring — kompensera med motrörelse nedåt
+        let compensateDown = SKAction.moveBy(x: 0, y: -70, duration: 0.33)
+        compensateDown.timingMode = .easeOut
+        let compensateUp = SKAction.moveBy(x: 0, y: 70, duration: 0.22)
+        compensateUp.timingMode = .easeIn
+
+        for name in names {
+            deer.enumerateChildNodes(withName: name) { boll, _ in
+                let dir: CGFloat = Bool.random() ? 1 : -1
+                let duration = TimeInterval.random(in: 0.9...1.4)
+                boll.run(SKAction.rotate(byAngle: .pi * 6 * dir, duration: duration), withKey: "rearSpin")
+                // Motrörelse: ner när deer lyfter, upp när deer landar
+                boll.run(SKAction.sequence([
+                    compensateDown,
+                    SKAction.wait(forDuration: duration * 0.6),
+                    compensateUp
+                ]), withKey: "rearCompensate")
+            }
+        }
     }
 
     // MARK: - Deer Dance
@@ -1761,147 +2429,12 @@ class GameScene: SKScene {
 
         isDeerDancing = true
 
-        // Maskros-fröställning — 9 maskrosor i ring som snurrar
-        // Outer glow på hela karusellen (samma stil som tavlan)
-        let maskrosGlow = SKEffectNode()
-        maskrosGlow.shouldRasterize = true
-        maskrosGlow.filter = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 25.0])
-        maskrosGlow.position = CGPoint(x: 50, y: -750)
-        maskrosGlow.zPosition = 19
-        maskrosGlow.alpha = 0
-        maskrosGlow.name = "maskrosGlow"
-        deer.addChild(maskrosGlow)
+        // Stoppa teaser-maskrosor och blås bort maskrosbollen
+        deer.removeAction(forKey: "teaserMaskros")
+        blowAwayMaskros()
 
-        let maskrosCarousel = SKNode()
-        maskrosCarousel.position = CGPoint(x: 50, y: -750)  // vid hovarna
-        maskrosCarousel.zPosition = 20
-        maskrosCarousel.alpha = 0
-        maskrosCarousel.name = "maskrosCarousel"
-        deer.addChild(maskrosCarousel)
-
-        let maskrosNames = ["maskros1", "maskros2", "maskros3"]
-        let count = 9
-        let radius: CGFloat = 0
-        let angleStep = (.pi * 2) / CGFloat(count)
-
-        for i in 0..<count {
-            let angle = angleStep * CGFloat(i) - .pi / 2
-
-            // Container per maskros — för individuell vickning
-            let container = SKNode()
-            container.position = CGPoint(x: cos(angle) * radius, y: sin(angle) * radius)
-            container.name = "maskrosItem"
-            maskrosCarousel.addChild(container)
-
-            // Inverterad maskros via CIColorInvert
-            let invertNode = SKEffectNode()
-            invertNode.shouldRasterize = true
-            invertNode.filter = CIFilter(name: "CIColorInvert")
-            let m = SKSpriteNode(imageNamed: maskrosNames[i % 3])
-            m.zRotation = angle - .pi / 2  // stjälken pekar inåt
-            m.setScale(1.0)
-            m.anchorPoint = CGPoint(x: 0.5, y: 0.0)  // pivot vid stjälkens bas
-            invertNode.addChild(m)
-            container.addChild(invertNode)
-
-            // Outer glow
-            let glow = SKEffectNode()
-            glow.shouldRasterize = true
-            glow.filter = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 14.0])
-            glow.zPosition = -1
-
-            let glowSprite = SKSpriteNode(imageNamed: maskrosNames[i % 3])
-            glowSprite.zRotation = angle - .pi / 2
-            glowSprite.anchorPoint = CGPoint(x: 0.5, y: 0.0)
-            glowSprite.setScale(1.1)
-            glowSprite.colorBlendFactor = 1.0
-            glowSprite.color = .white
-            glowSprite.alpha = 0.85
-            glow.addChild(glowSprite)
-            container.addChild(glow)
-
-            // Individuell vickning — varje maskros vaggar från basen
-            let delay = Double(i) * 0.15
-            let wiggleAmount: CGFloat = CGFloat.random(in: 0.08...0.15)
-            let wiggleSpeed = TimeInterval.random(in: 0.6...1.0)
-            let wiggleR = SKAction.rotate(byAngle: wiggleAmount, duration: wiggleSpeed)
-            wiggleR.timingMode = .easeInEaseOut
-            let wiggleL = SKAction.rotate(byAngle: -wiggleAmount * 2, duration: wiggleSpeed * 2)
-            wiggleL.timingMode = .easeInEaseOut
-            let wiggleBack = SKAction.rotate(byAngle: wiggleAmount, duration: wiggleSpeed)
-            wiggleBack.timingMode = .easeInEaseOut
-
-            invertNode.run(SKAction.sequence([
-                SKAction.wait(forDuration: delay),
-                SKAction.repeatForever(SKAction.sequence([wiggleR, wiggleL, wiggleBack]))
-            ]), withKey: "maskrosWiggle")
-        }
-
-        // Bygg glow-kopia av alla maskrosor (vit, blurrad)
-        for i in 0..<count {
-            let angle = angleStep * CGFloat(i) - .pi / 2
-            let g = SKSpriteNode(imageNamed: maskrosNames[i % 3])
-            g.position = CGPoint(x: cos(angle) * radius, y: sin(angle) * radius)
-            g.zRotation = angle - .pi / 2
-            g.setScale(1.1)
-            g.anchorPoint = CGPoint(x: 0.5, y: 0.0)
-            g.colorBlendFactor = 1.0
-            g.color = .white
-            maskrosGlow.addChild(g)
-        }
-
-        // Pulserande shimmer på glowen (samma som tavlan)
-        let shimmer = SKAction.sequence([
-            SKAction.fadeAlpha(to: 0.9, duration: 1.2),
-            SKAction.fadeAlpha(to: 0.4, duration: 1.0),
-            SKAction.fadeAlpha(to: 1.0, duration: 0.8),
-            SKAction.fadeAlpha(to: 0.35, duration: 1.4)
-        ])
-
-        // Fada in → stanna → blås bort som fröställning
-        maskrosCarousel.run(SKAction.fadeAlpha(to: 1.0, duration: 1.0))
-        maskrosGlow.run(SKAction.sequence([
-            SKAction.fadeAlpha(to: 0.8, duration: 1.0),
-            SKAction.repeatForever(shimmer)
-        ]))
-
-        // Efter 3.5s: blås bort alla maskrosor åt höger (som vinden tar dem)
-        maskrosCarousel.run(SKAction.sequence([
-            SKAction.wait(forDuration: 3.5),
-            SKAction.run {
-                maskrosCarousel.enumerateChildNodes(withName: "maskrosItem") { container, _ in
-                    // Varje maskros blåser iväg åt höger-uppåt med slumpmässig spridning
-                    let windX = CGFloat.random(in: 400...900)
-                    let windY = CGFloat.random(in: 100...500)
-                    let spinAngle = CGFloat.random(in: 2...6) * (Bool.random() ? 1 : -1)
-                    let duration = TimeInterval.random(in: 1.2...2.5)
-                    let delay = TimeInterval.random(in: 0...0.6)
-
-                    container.run(SKAction.sequence([
-                        SKAction.wait(forDuration: delay),
-                        SKAction.group([
-                            SKAction.moveBy(x: windX, y: windY, duration: duration),
-                            SKAction.rotate(byAngle: spinAngle, duration: duration),
-                            SKAction.scale(to: 0.3, duration: duration),
-                            SKAction.sequence([
-                                SKAction.wait(forDuration: duration * 0.5),
-                                SKAction.fadeOut(withDuration: duration * 0.5),
-                            ])
-                        ])
-                    ]))
-                }
-            },
-            // Ta bort karusellen efter att alla blåst bort
-            SKAction.wait(forDuration: 3.5),
-            SKAction.removeFromParent()
-        ]))
-
-        // Glowen fadear ut samtidigt
-        maskrosGlow.run(SKAction.sequence([
-            SKAction.wait(forDuration: 3.5),
-            SKAction.fadeOut(withDuration: 1.0),
-            SKAction.removeFromParent()
-        ]))
+        // Kontinuerlig maskros-storm under hela dansen
+        startMaskrosStorm(on: deer)
 
         // Stoppa idle-animationer och glow
         deer.removeAction(forKey: "deerBreathe")
@@ -2787,6 +3320,7 @@ class GameScene: SKScene {
             // Fas 1 — försiktig andning
             SKAction.run { startDanceBreath(bodyScale: 0.008, headBob: 1.5, speed: 0.45) },
             SKAction.run { phase1() },
+            SKAction.run { [weak self] in if moonFirst { self?.moonwalkMaskrosor(duration: moonDur) } },
             SKAction.wait(forDuration: phase1Dur + 0.05),
             SKAction.run { [weak self] in stopPhaseActions(); self?.resetDeerParts() },
             SKAction.wait(forDuration: 0.15),
@@ -2794,6 +3328,7 @@ class GameScene: SKScene {
             // Fas 2 — lite mer andning
             SKAction.run { startDanceBreath(bodyScale: 0.012, headBob: 2.0, speed: 0.40) },
             SKAction.run { phase2() },
+            SKAction.run { [weak self] in if !moonFirst { self?.moonwalkMaskrosor(duration: moonDur) } },
             SKAction.wait(forDuration: phase2Dur + 0.05),
             SKAction.run { [weak self] in stopPhaseActions(); self?.resetDeerParts() },
             SKAction.wait(forDuration: 0.15),
@@ -2808,6 +3343,7 @@ class GameScene: SKScene {
             // Fas R: Stegring — tydlig andning
             SKAction.run { startDanceBreath(bodyScale: 0.022, headBob: 4.0, speed: 0.32) },
             SKAction.run { startRearingPhase() },
+            SKAction.run { [weak self] in self?.spinAllMaskrosor() },
             SKAction.wait(forDuration: rearDur + 0.05),
             SKAction.run { [weak self] in stopPhaseActions(); self?.resetDeerParts() },
             SKAction.wait(forDuration: 0.15),
@@ -2853,16 +3389,7 @@ class GameScene: SKScene {
                 self.resetDeerParts()
                 self.isDeerDancing = false
                 self.isDeerPostDance = true
-
-                // Fada ut maskros-karusellen + glow
-                for name in ["maskrosCarousel", "maskrosGlow"] {
-                    if let node = deer.childNode(withName: name) {
-                        node.run(SKAction.sequence([
-                            SKAction.fadeOut(withDuration: 1.5),
-                            SKAction.removeFromParent()
-                        ]))
-                    }
-                }
+                self.stopMaskrosStorm()
 
                 // Andning — kroppen
                 let breatheUp = SKAction.scale(to: baseScale * 1.015, duration: 1.4)
