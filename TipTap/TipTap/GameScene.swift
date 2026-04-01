@@ -79,12 +79,16 @@ class GameScene: SKScene {
     }
 
     private func setupGokur() {
-        let gokur = SKSpriteNode(imageNamed: "gokur_open")
+        let gokur = SKSpriteNode(imageNamed: "gokur_closed")
         gokur.position = CGPoint(x: 2139, y: 1421)
         gokur.zPosition = 5
         gokur.setScale(0.421)
         gokur.name = "gokur"
         addChild(gokur)
+    }
+
+    private func tapGokur() {
+        // TODO: Gökur-interaktion — jobbar vidare imorgon
     }
 
     private func setupHall() {
@@ -3595,6 +3599,12 @@ class GameScene: SKScene {
 
         switch sceneState {
         case .sleeping:
+            // Gökur tap — öppna uret
+            if tappedNodes.contains(where: { $0.name == "gokur" }) {
+                tapGokur()
+                return
+            }
+
             // Hat tap — start hat sequence
             if tappedNodes.contains(where: { $0.name == "hat" }) {
                 startHatSequence()
