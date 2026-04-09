@@ -207,6 +207,7 @@ class GameScene: SKScene {
     }
 
     private var eggWaitingForTap = false
+    private var muggWaitingForTap = false
     private var gokurActive = false
     private var gokurWaitingAfterTittut = false
     private var eggLuckaPos: CGPoint = .zero
@@ -446,8 +447,11 @@ class GameScene: SKScene {
                 swell(2.3, 0.35),
                 SKAction.wait(forDuration: 0.35),
 
-                // --- SNAP: plötsligt snabbt inslag ---
+                // --- SNAP: plötsligt snabbt inslag + kyckling-blink ---
                 snap(5.8), softShake(),
+                SKAction.setTexture(egg2Tex, resize: false),
+                SKAction.wait(forDuration: 0.07),
+                SKAction.setTexture(egg1Tex, resize: false),
                 swell(2.0, 0.5),
                 SKAction.wait(forDuration: 0.4),
 
@@ -532,6 +536,388 @@ class GameScene: SKScene {
         ]
 
         egg.run(SKAction.sequence(fullSequence))
+    }
+
+    private func tapMugg() {
+        guard muggWaitingForTap,
+              let gokurContainer = childNode(withName: "gokur"),
+              let mugg = gokurContainer.childNode(withName: "gokurMugg") as? SKSpriteNode else { return }
+        muggWaitingForTap = false
+        mugg.removeAllActions()
+
+        // Säkra att allt är gömt
+        transitionManager.activateObject(id: .gokur)
+        owl.removeAllActions()
+        owl.alpha = 0
+        toolboxNode.fadeAway()
+
+        let idleTex = SKTexture(imageNamed: "gokur_open")
+        let muggTextures = (1...5).map { SKTexture(imageNamed: "mugg\($0)") }
+        let returnPos = mugg.position
+
+        // Beräkna scenens mittpunkt i gökur-containerns koordinater
+        let sceneCenter = CGPoint(x: frame.midX, y: frame.midY)
+        let centerInGokur = convert(sceneCenter, to: gokurContainer)
+
+        // Flytta till mitten och väx
+        let moveToCenter = SKAction.move(to: centerInGokur, duration: 0.5)
+        moveToCenter.timingMode = .easeInEaseOut
+        let growBig = SKAction.scale(to: 2.8, duration: 0.5)
+        growBig.timingMode = .easeInEaseOut
+
+        // Outer glow (Photoshop-stil) — stor spread, transparens 0.5
+        let muggGlow = SKEffectNode()
+        muggGlow.shouldRasterize = true
+        muggGlow.filter = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 60.0])
+        muggGlow.zPosition = -1
+        muggGlow.alpha = 0
+        let glowSprite = SKSpriteNode(imageNamed: "mugg1")
+        glowSprite.setScale(1.6)
+        glowSprite.colorBlendFactor = 1.0
+        glowSprite.color = SKColor(red: 1.0, green: 1.0, blue: 0.95, alpha: 1.0)
+        muggGlow.addChild(glowSprite)
+        mugg.addChild(muggGlow)
+
+        let shimmer = SKAction.repeatForever(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.45, duration: 1.2),
+            SKAction.fadeAlpha(to: 0.2, duration: 1.0),
+            SKAction.fadeAlpha(to: 0.5, duration: 0.8),
+            SKAction.fadeAlpha(to: 0.15, duration: 1.4),
+        ]))
+        muggGlow.run(SKAction.sequence([
+            SKAction.wait(forDuration: 0.5),
+            SKAction.fadeAlpha(to: 0.4, duration: 0.5),
+            shimmer
+        ]))
+
+        // Disco-glitter / solkatter som virvlar runt i hela rummet, bakom muggen
+        let glitterNode = SKNode()
+        glitterNode.zPosition = -2  // bakom muggen
+        glitterNode.name = "muggGlitter"
+        mugg.addChild(glitterNode)
+
+        let spawnGlitter = SKAction.run { [weak glitterNode] in
+            guard let glitterNode else { return }
+
+            let isStar = Int.random(in: 0...2) == 0
+            let particle = SKShapeNode(circleOfRadius: CGFloat.random(in: 4...12))
+
+            if isStar {
+                let size = CGFloat.random(in: 6...16)
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: 0, y: size))
+                path.addLine(to: CGPoint(x: size * 0.2, y: size * 0.2))
+                path.addLine(to: CGPoint(x: size, y: 0))
+                path.addLine(to: CGPoint(x: size * 0.2, y: -size * 0.2))
+                path.addLine(to: CGPoint(x: 0, y: -size))
+                path.addLine(to: CGPoint(x: -size * 0.2, y: -size * 0.2))
+                path.addLine(to: CGPoint(x: -size, y: 0))
+                path.addLine(to: CGPoint(x: -size * 0.2, y: size * 0.2))
+                path.closeSubpath()
+                particle.path = path
+            }
+
+            switch Int.random(in: 0...3) {
+            case 0: particle.fillColor = SKColor(red: 1.0, green: 0.95, blue: 0.6, alpha: 1.0)
+            case 1: particle.fillColor = .white
+            case 2: particle.fillColor = SKColor(red: 1.0, green: 0.85, blue: 0.4, alpha: 1.0)
+            default: particle.fillColor = SKColor(red: 0.95, green: 1.0, blue: 0.85, alpha: 1.0)
+            }
+            particle.strokeColor = .clear
+            particle.glowWidth = isStar ? 4.0 : 2.0
+            particle.blendMode = .add
+
+            // Startar utspritt över hela rummet
+            let startAngle = CGFloat.random(in: 0...(.pi * 2))
+            let startRadius = CGFloat.random(in: 150...800)
+            particle.position = CGPoint(x: cos(startAngle) * startRadius, y: sin(startAngle) * startRadius)
+            particle.alpha = 0
+            particle.setScale(CGFloat.random(in: 0.5...2.0))
+            glitterNode.addChild(particle)
+
+            // Virvlar i stora bågar genom rummet
+            let arcAngle = CGFloat.random(in: 1.0...3.0) * (Bool.random() ? 1 : -1)
+            let life = TimeInterval.random(in: 0.8...2.0)
+            let endAngle = startAngle + arcAngle
+            let endRadius = CGFloat.random(in: 150...800)
+            let endPos = CGPoint(x: cos(endAngle) * endRadius, y: sin(endAngle) * endRadius)
+
+            let peakAlpha = CGFloat.random(in: 0.4...0.8)
+            particle.run(SKAction.sequence([
+                SKAction.fadeAlpha(to: peakAlpha, duration: life * 0.15),
+                SKAction.group([
+                    SKAction.move(to: endPos, duration: life * 0.7),
+                    SKAction.rotate(byAngle: CGFloat.random(in: 2...6), duration: life * 0.7),
+                    SKAction.scale(to: CGFloat.random(in: 0.3...1.5), duration: life * 0.7),
+                ]),
+                SKAction.fadeOut(withDuration: life * 0.15),
+                SKAction.removeFromParent()
+            ]))
+        }
+
+        glitterNode.run(SKAction.sequence([
+            SKAction.wait(forDuration: 0.5),
+            SKAction.repeatForever(SKAction.sequence([
+                spawnGlitter, spawnGlitter, spawnGlitter,
+                SKAction.wait(forDuration: 0.04),
+            ]))
+        ]))
+
+        func boom(_ s: CGFloat, _ d: TimeInterval) -> SKAction {
+            let a = SKAction.scale(to: s, duration: d)
+            a.timingMode = .easeInEaseOut
+            return a
+        }
+        func snap(_ s: CGFloat) -> SKAction { SKAction.scale(to: s, duration: 0.04) }
+        func shake() -> SKAction {
+            SKAction.sequence([
+                SKAction.moveBy(x: 4, y: -2, duration: 0.03),
+                SKAction.moveBy(x: -7, y: 3, duration: 0.04),
+                SKAction.moveBy(x: 5, y: -2, duration: 0.03),
+                SKAction.moveBy(x: -2, y: 1, duration: 0.03),
+            ])
+        }
+        func randomMugg() -> SKAction {
+            SKAction.setTexture(muggTextures[Int.random(in: 0..<muggTextures.count)], resize: false)
+        }
+
+        // Specifika ansikten
+        let mugg1 = muggTextures[0]  // normalt ansikte
+        let mugg2 = muggTextures[1]  // ögon stängda (blinkar)
+        let mugg3 = muggTextures[2]  // stora ögon (tittar)
+        let mugg4 = muggTextures[3]  // blinkar med ena ögat
+        let mugg5 = muggTextures[4]  // räcker ut tungan
+
+        // Blink-helpers (blixtsnabbt ansiktsbyte)
+        func face(_ tex: SKTexture) -> SKAction { SKAction.setTexture(tex, resize: false) }
+        func blink(_ tex: SKTexture, _ dur: TimeInterval = 0.06) -> [SKAction] {
+            [face(tex), SKAction.wait(forDuration: dur), face(mugg1)]
+        }
+
+        // === KOREOGRAFI: Frysta ögonblick ===
+        // Varje "slag" = BOOM till stor storlek → FRYS → ett ansiktsbyte → BOOM tillbaka
+        // Som en dansare som slår en pose, fryser, skiftar blick, och slår nästa
+
+        let akt1: [SKAction] = [
+            // --- Entré: Mjuk boom in ---
+            SKAction.group([moveToCenter, growBig]),
+            boom(3.0, 0.15), shake(),
+            boom(2.6, 0.2),
+            SKAction.wait(forDuration: 0.8),
+
+            // --- Lugnt: Muggen tittar sig omkring ---
+            boom(3.2, 0.5),
+            SKAction.wait(forDuration: 0.4),
+            face(mugg2),
+            SKAction.wait(forDuration: 0.4),
+            face(mugg1),
+            SKAction.wait(forDuration: 0.6),
+            face(mugg3),
+            SKAction.wait(forDuration: 0.5),
+            face(mugg1),
+            boom(2.6, 0.4),
+            SKAction.wait(forDuration: 0.5),
+        ]
+
+        let akt2: [SKAction] = [
+            // --- Tittut börjar: lugnt men lekfullt ---
+            boom(3.5, 0.35), shake(),
+            face(mugg2),
+            SKAction.wait(forDuration: 0.25),
+            face(mugg1),
+            boom(2.5, 0.3),
+            SKAction.wait(forDuration: 0.4),
+
+            boom(3.6, 0.3),
+            face(mugg4),
+            SKAction.wait(forDuration: 0.35),
+            face(mugg1),
+            boom(2.5, 0.25),
+            SKAction.wait(forDuration: 0.5),
+
+            // Överraskning — snabb blink!
+            snap(3.8), shake(),
+            face(mugg2), SKAction.wait(forDuration: 0.15), face(mugg1),
+            boom(2.5, 0.2),
+            SKAction.wait(forDuration: 0.5),
+        ]
+
+        let akt3: [SKAction] = [
+            // --- Nyckfullt: Växlar tempo ---
+            boom(3.4, 0.5),
+            face(mugg3),
+            SKAction.wait(forDuration: 0.5),
+            face(mugg1),
+            boom(2.5, 0.4),
+            SKAction.wait(forDuration: 0.3),
+
+            // Plötsligt snabbt!
+            snap(4.0), shake(),
+            face(mugg2), SKAction.wait(forDuration: 0.12), face(mugg1),
+            boom(2.5, 0.12),
+
+            // Lugnt igen...
+            SKAction.wait(forDuration: 0.5),
+            boom(3.5, 0.4),
+            face(mugg4),
+            SKAction.wait(forDuration: 0.4),
+            face(mugg1),
+            boom(2.5, 0.35),
+            SKAction.wait(forDuration: 0.3),
+
+            // Snabbt igen!
+            snap(4.2), shake(), shake(),
+            face(mugg3), SKAction.wait(forDuration: 0.12), face(mugg1),
+            boom(2.5, 0.12),
+            SKAction.wait(forDuration: 0.4),
+        ]
+
+        let akt4: [SKAction] = [
+            // --- Crescendo ---
+            boom(3.8, 0.25), shake(),
+            face(mugg2), SKAction.wait(forDuration: 0.15), face(mugg1),
+            boom(2.4, 0.2),
+            SKAction.wait(forDuration: 0.15),
+
+            boom(4.0, 0.2), shake(),
+            face(mugg4), SKAction.wait(forDuration: 0.15), face(mugg1),
+            boom(2.3, 0.15),
+            SKAction.wait(forDuration: 0.12),
+
+            snap(4.3), shake(),
+            face(mugg3), SKAction.wait(forDuration: 0.12), face(mugg1),
+            boom(2.3, 0.12),
+            SKAction.wait(forDuration: 0.1),
+
+            snap(4.5), shake(),
+            face(mugg2), SKAction.wait(forDuration: 0.1), face(mugg1),
+            boom(2.3, 0.1),
+            SKAction.wait(forDuration: 0.08),
+
+            snap(4.7), shake(), shake(),
+            face(mugg4), SKAction.wait(forDuration: 0.08), face(mugg1),
+            boom(2.3, 0.08),
+            SKAction.wait(forDuration: 0.15),
+        ]
+
+        let finale: [SKAction] = [
+            // --- Andning in ---
+            boom(1.8, 0.4),
+            SKAction.wait(forDuration: 0.3),
+
+            // --- BIGGEST BOOM + TUNGAN ---
+            snap(5.0), shake(), shake(), shake(),
+            face(mugg5),
+            SKAction.wait(forDuration: 1.0),
+
+            // --- Mjuk nedstängning ---
+            face(mugg2),
+            boom(3.5, 0.4),
+            SKAction.wait(forDuration: 0.4),
+            face(mugg1),
+            boom(2.8, 0.5),
+            SKAction.wait(forDuration: 0.3),
+        ]
+
+        let boomSequence = akt1 + akt2 + akt3 + akt4 + finale
+
+        // Pulserande retur till luckan
+        let returnToLucka = SKAction.move(to: returnPos, duration: 2.0)
+        returnToLucka.timingMode = .easeIn
+
+        let returnSequence: [SKAction] = [
+            SKAction.group([
+                returnToLucka,
+                SKAction.sequence([
+                    boom(1.8, 0.15), boom(1.0, 0.12),
+                    boom(1.5, 0.13), boom(0.85, 0.12),
+                    boom(1.3, 0.12), boom(0.75, 0.11),
+                    boom(1.1, 0.11), boom(0.7, 0.1),
+                    boom(0.9, 0.1), boom(0.6, 0.1),
+                    boom(0.75, 0.08), boom(0.55, 0.08),
+                ]),
+            ]),
+            SKAction.fadeOut(withDuration: 0.2),
+            SKAction.run { [weak self] in
+                guard let self else { return }
+                guard let body = gokurContainer.childNode(withName: "gokurBody") as? SKSpriteNode else { return }
+                body.texture = idleTex
+                self.run(SKAction.sequence([
+                    SKAction.wait(forDuration: 1.5),
+                    SKAction.run {
+                        self.gokurActive = false
+                        self.transitionManager.deactivateAll()
+                        self.toolboxNode.fadeBack()
+                        self.owl.run(SKAction.sequence([
+                            SKAction.wait(forDuration: 0.8),
+                            SKAction.fadeIn(withDuration: 3.0),
+                            SKAction.run { [weak self] in
+                                self?.owl.startSleeping()
+                            }
+                        ]))
+                    }
+                ]))
+            },
+            SKAction.removeFromParent()
+        ]
+
+        mugg.run(SKAction.sequence(boomSequence + returnSequence))
+    }
+
+    private func showGokurMugg(in container: SKNode) {
+        container.childNode(withName: "gokurMugg")?.removeFromParent()
+
+        // Säkra att alla andra objekt är gömda
+        transitionManager.activateObject(id: .gokur)
+        owl.removeAllActions()
+        owl.alpha = 0
+        toolboxNode.fadeAway()
+
+        let mugg = SKSpriteNode(imageNamed: "mugg1")
+        mugg.position = CGPoint(x: 50, y: 320)  // vid stora luckan
+        mugg.zPosition = 50
+        mugg.setScale(0.1)
+        mugg.alpha = 0
+        mugg.name = "gokurMugg"
+        container.addChild(mugg)
+
+        let idleTex = SKTexture(imageNamed: "gokur_open")
+
+        // Poppa ut liten, väx, darr, stanna, krympa tillbaka
+        let shake = SKAction.repeat(SKAction.sequence([
+            SKAction.moveBy(x: 3, y: 0, duration: 0.04),
+            SKAction.moveBy(x: -5, y: 2, duration: 0.05),
+            SKAction.moveBy(x: 4, y: -3, duration: 0.04),
+            SKAction.moveBy(x: -2, y: 1, duration: 0.03),
+        ]), count: 5)
+
+        mugg.run(SKAction.sequence([
+            // Poppa ut
+            SKAction.group([
+                SKAction.fadeAlpha(to: 1.0, duration: 0.1),
+                SKAction.sequence([
+                    SKAction.scale(to: 0.58, duration: 0.15),
+                    SKAction.scale(to: 0.45, duration: 0.08),
+                    SKAction.scale(to: 0.52, duration: 0.06),
+                ]),
+                SKAction.moveBy(x: 0, y: 40, duration: 0.2),
+            ]),
+            // Darr
+            shake,
+            // Väx till full storlek (1.3x av förut)
+            SKAction.scale(to: 0.72, duration: 0.5),
+            // Vänta på tap — darra medan vi väntar
+            SKAction.run { [weak self] in
+                self?.muggWaitingForTap = true
+            },
+            SKAction.repeatForever(SKAction.sequence([
+                SKAction.moveBy(x: 3, y: 0, duration: 0.06),
+                SKAction.moveBy(x: -5, y: 1, duration: 0.08),
+                SKAction.moveBy(x: 4, y: -2, duration: 0.06),
+                SKAction.moveBy(x: -2, y: 1, duration: 0.05),
+                SKAction.wait(forDuration: 0.15),
+            ]))
+        ]))
     }
 
     private func tapGokur() {
@@ -619,23 +1005,9 @@ class GameScene: SKScene {
                 }
             ]), withKey: "gokurTap")
         } else {
-            // Stor lucka — enkel öppna-stäng
-            body.run(SKAction.sequence([
-                SKAction.setTexture(openTex, resize: false),
-                SKAction.wait(forDuration: 2.0),
-                SKAction.setTexture(idleTex, resize: false),
-                SKAction.run { [weak self] in
-                    self?.transitionManager.deactivateAll()
-                    self?.toolboxNode.fadeBack()
-                    self?.owl.run(SKAction.sequence([
-                        SKAction.wait(forDuration: 0.8),
-                        SKAction.fadeIn(withDuration: 3.0),
-                        SKAction.run { [weak self] in
-                            self?.owl.startSleeping()
-                        }
-                    ]))
-                }
-            ]), withKey: "gokurTap")
+            // Stor lucka — mugg dyker upp
+            body.texture = openTex
+            showGokurMugg(in: gokurContainer)
         }
     }
 
@@ -737,6 +1109,10 @@ class GameScene: SKScene {
         sceneState = .sleeping
         portraitStep = 0
         currentPortrait = nil
+        gokurActive = false
+        gokurWaitingAfterTittut = false
+        eggWaitingForTap = false
+        muggWaitingForTap = false
         transitionManager = TransitionManager()
         setupHall()
         setupOwl()
@@ -4148,6 +4524,12 @@ class GameScene: SKScene {
 
         switch sceneState {
         case .sleeping:
+            // Mugg tap
+            if muggWaitingForTap && tappedNodes.contains(where: { $0.name == "gokurMugg" }) {
+                tapMugg()
+                return
+            }
+
             // Ägg tap — interagera med ägget
             if eggWaitingForTap && tappedNodes.contains(where: { $0.name == "gokurEgg" }) {
                 tapEgg()
