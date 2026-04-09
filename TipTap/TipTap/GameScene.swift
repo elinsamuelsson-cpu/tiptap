@@ -79,16 +79,564 @@ class GameScene: SKScene {
     }
 
     private func setupGokur() {
-        let gokur = SKSpriteNode(imageNamed: "gokur_closed")
-        gokur.position = CGPoint(x: 2139, y: 1421)
-        gokur.zPosition = 5
-        gokur.setScale(0.421)
-        gokur.name = "gokur"
-        addChild(gokur)
+        // Container för alla gökurs-delar
+        let gokurContainer = SKNode()
+        gokurContainer.position = CGPoint(x: 2139, y: 1421)
+        gokurContainer.zPosition = 5
+        gokurContainer.setScale(0.421)
+        gokurContainer.name = "gokur"
+        addChild(gokurContainer)
+        transitionManager.registerObject(id: .gokur, sprite: gokurContainer)
+
+        // Lod bakom gökuret (z = -1, -2, -3)
+        for i in 1...3 {
+            let lod = SKSpriteNode(imageNamed: "lod\(i)")
+            lod.zPosition = -CGFloat(i)
+            lod.name = "lod\(i)"
+            gokurContainer.addChild(lod)
+        }
+
+        // Flytta lod 1 & 2 uppåt 150px
+        gokurContainer.childNode(withName: "lod1")?.position.y += 150
+        gokurContainer.childNode(withName: "lod2")?.position.y += 150
+
+        // Lod 1 & 2: pendling upp och ner
+        if let lod1 = gokurContainer.childNode(withName: "lod1") {
+            let down1 = SKAction.moveBy(x: 0, y: -50, duration: 1.4)
+            down1.timingMode = .easeInEaseOut
+            let up1 = SKAction.moveBy(x: 0, y: 50, duration: 1.4)
+            up1.timingMode = .easeInEaseOut
+            lod1.run(SKAction.repeatForever(SKAction.sequence([down1, up1])), withKey: "lodPendel")
+        }
+
+        if let lod2 = gokurContainer.childNode(withName: "lod2") {
+            // Lite förskjuten i tid och hastighet
+            let down2 = SKAction.moveBy(x: 0, y: -45, duration: 1.6)
+            down2.timingMode = .easeInEaseOut
+            let up2 = SKAction.moveBy(x: 0, y: 45, duration: 1.6)
+            up2.timingMode = .easeInEaseOut
+            lod2.run(SKAction.sequence([
+                SKAction.wait(forDuration: 0.6),
+                SKAction.repeatForever(SKAction.sequence([down2, up2]))
+            ]), withKey: "lodPendel")
+        }
+
+        // Lod 3: pendlar fram och tillbaka (horisontellt)
+        if let lod3 = gokurContainer.childNode(withName: "lod3") {
+            let left = SKAction.moveBy(x: -18, y: 0, duration: 1.8)
+            left.timingMode = .easeInEaseOut
+            let right = SKAction.moveBy(x: 18, y: 0, duration: 1.8)
+            right.timingMode = .easeInEaseOut
+            lod3.run(SKAction.repeatForever(SKAction.sequence([left, right])), withKey: "lodPendel")
+        }
+
+        // Gökurets kropp framför loden
+        let body = SKSpriteNode(imageNamed: "gokur_open")
+        body.zPosition = 1
+        body.name = "gokurBody"
+        gokurContainer.addChild(body)
+
+        // Glitter
+        let glitter = SKNode()
+        glitter.name = "gokurGlitter"
+        glitter.zPosition = 2
+        gokurContainer.addChild(glitter)
+
+        let spawn = SKAction.run { [weak glitter] in
+            guard let glitter else { return }
+
+            let isStar = Int.random(in: 0...3) == 0
+            let particle: SKShapeNode
+
+            if isStar {
+                let size = CGFloat.random(in: 4...10)
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: 0, y: size))
+                path.addLine(to: CGPoint(x: size * 0.2, y: size * 0.2))
+                path.addLine(to: CGPoint(x: size, y: 0))
+                path.addLine(to: CGPoint(x: size * 0.2, y: -size * 0.2))
+                path.addLine(to: CGPoint(x: 0, y: -size))
+                path.addLine(to: CGPoint(x: -size * 0.2, y: -size * 0.2))
+                path.addLine(to: CGPoint(x: -size, y: 0))
+                path.addLine(to: CGPoint(x: -size * 0.2, y: size * 0.2))
+                path.closeSubpath()
+                particle = SKShapeNode(path: path)
+            } else {
+                particle = SKShapeNode(circleOfRadius: CGFloat.random(in: 2...5))
+            }
+
+            switch Int.random(in: 0...2) {
+            case 0: particle.fillColor = SKColor(red: 1.0, green: 0.85, blue: 0.3, alpha: 1.0)
+            case 1: particle.fillColor = SKColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
+            default: particle.fillColor = SKColor(red: 1.0, green: 0.95, blue: 0.6, alpha: 1.0)
+            }
+            particle.strokeColor = .clear
+            particle.glowWidth = isStar ? 2.0 : 1.0
+
+            let x = CGFloat.random(in: -400...400)
+            let y = CGFloat.random(in: -200...500)
+            particle.position = CGPoint(x: x, y: y)
+            particle.alpha = 0
+            particle.setScale(CGFloat.random(in: 0.4...1.2))
+            glitter.addChild(particle)
+
+            let life = TimeInterval.random(in: 2.0...3.5)
+            let peakAlpha: CGFloat = 0.5
+            let pulseSpeed = TimeInterval.random(in: 0.5...1.0)
+
+            let fadeIn = SKAction.fadeAlpha(to: peakAlpha, duration: life * 0.2)
+            let drift = SKAction.moveBy(x: CGFloat.random(in: -8...8),
+                                         y: CGFloat.random(in: 6...15), duration: life)
+            let fadeOut = SKAction.fadeOut(withDuration: life * 0.3)
+
+            let pulseCount = Int(life / (pulseSpeed * 2))
+            let pulse = SKAction.repeat(SKAction.sequence([
+                SKAction.fadeAlpha(to: peakAlpha * 0.15, duration: pulseSpeed),
+                SKAction.fadeAlpha(to: peakAlpha, duration: pulseSpeed),
+            ]), count: max(2, pulseCount))
+
+            particle.run(SKAction.sequence([
+                fadeIn,
+                SKAction.group([pulse, drift]),
+                fadeOut,
+                SKAction.removeFromParent()
+            ]))
+        }
+        let delay = SKAction.wait(forDuration: 0.18)
+        glitter.run(SKAction.repeatForever(SKAction.sequence([spawn, delay])), withKey: "glitterLoop")
+    }
+
+    private var eggWaitingForTap = false
+    private var gokurActive = false
+    private var gokurWaitingAfterTittut = false
+    private var eggLuckaPos: CGPoint = .zero
+
+    private func showGokurEgg(in container: SKNode) {
+        // Ta bort eventuellt befintligt ägg
+        container.childNode(withName: "gokurEgg")?.removeFromParent()
+        eggWaitingForTap = false
+
+        // Säkra att alla andra objekt är gömda
+        transitionManager.activateObject(id: .gokur)
+        owl.removeAllActions()
+        owl.alpha = 0
+        toolboxNode.fadeAway()
+
+        let luckaPos = CGPoint(x: -30, y: 440)
+        eggLuckaPos = luckaPos
+
+        let egg = SKSpriteNode(imageNamed: "egg")
+        egg.position = luckaPos
+        egg.zPosition = 50
+        egg.setScale(0.5)
+        egg.alpha = 0
+        egg.name = "gokurEgg"
+        container.addChild(egg)
+
+        let shake = SKAction.repeat(SKAction.sequence([
+            SKAction.moveBy(x: 3, y: 0, duration: 0.04),
+            SKAction.moveBy(x: -6, y: 0, duration: 0.06),
+            SKAction.moveBy(x: 5, y: 0, duration: 0.04),
+            SKAction.moveBy(x: -2, y: 0, duration: 0.04),
+        ]), count: 8)
+
+        let growDouble = SKAction.scale(to: 1.0, duration: 0.8)
+        growDouble.timingMode = .easeInEaseOut
+
+        egg.run(SKAction.sequence([
+            // Poppa ut
+            SKAction.group([
+                SKAction.fadeAlpha(to: 1.0, duration: 0.15),
+                SKAction.moveBy(x: 0, y: 50, duration: 0.3),
+            ]),
+            // Darra
+            shake,
+            // Väx till dubbla storleken
+            growDouble,
+            // Vänta på tap
+            SKAction.run { [weak self] in
+                self?.eggWaitingForTap = true
+            },
+            // Pulsera medan vi väntar på tap
+            SKAction.repeatForever(SKAction.sequence([
+                SKAction.scale(to: 1.05, duration: 0.6),
+                SKAction.scale(to: 0.95, duration: 0.6),
+            ]))
+        ]))
+    }
+
+    private func tapEgg() {
+        guard eggWaitingForTap,
+              let gokurContainer = childNode(withName: "gokur"),
+              let egg = gokurContainer.childNode(withName: "gokurEgg") as? SKSpriteNode else { return }
+        eggWaitingForTap = false
+        egg.removeAllActions()
+
+        // Säkra att alla andra objekt är gömda under ägg-sekvensen
+        transitionManager.activateObject(id: .gokur)
+        owl.removeAllActions()
+        owl.alpha = 0
+        toolboxNode.fadeAway()
+
+        // Beräkna scenens mittpunkt i gökur-containerns koordinater
+        let sceneCenter = CGPoint(x: frame.midX, y: frame.midY)
+        let centerInGokur = convert(sceneCenter, to: gokurContainer)
+
+        // Flytta till mitten och väx till full storlek
+        let moveToCenter = SKAction.move(to: centerInGokur, duration: 0.6)
+        moveToCenter.timingMode = .easeInEaseOut
+        let growFull = SKAction.scale(to: 3.5, duration: 0.6)
+        growFull.timingMode = .easeInEaseOut
+
+        // Slumpmässigt: knäckas eller snurra
+        let doHatch = Bool.random()
+        let egg1Tex = SKTexture(imageNamed: "egg")
+        let egg2Tex = SKTexture(imageNamed: "egg2")
+
+        var funSequence: [SKAction] = []
+
+        if doHatch {
+            // Alternativ 1: Knäcks → kyckling → tillbaka till ägg
+            let hatchShake = SKAction.repeat(SKAction.sequence([
+                SKAction.rotate(byAngle: 0.08, duration: 0.05),
+                SKAction.rotate(byAngle: -0.16, duration: 0.08),
+                SKAction.rotate(byAngle: 0.08, duration: 0.05),
+            ]), count: 4)
+
+            // Liten darr-funktion
+            func miniShake() -> SKAction {
+                SKAction.sequence([
+                    SKAction.moveBy(x: 4, y: 0, duration: 0.03),
+                    SKAction.moveBy(x: -7, y: 2, duration: 0.04),
+                    SKAction.moveBy(x: 5, y: -3, duration: 0.03),
+                    SKAction.moveBy(x: -2, y: 1, duration: 0.03),
+                ])
+            }
+
+            func preBoom(_ s: CGFloat, _ d: TimeInterval) -> SKAction {
+                let a = SKAction.scale(to: s, duration: d)
+                a.timingMode = .easeInEaseOut
+                return a
+            }
+
+            funSequence = [
+                SKAction.wait(forDuration: 0.2),
+
+                // --- Boom boom som okläckt! ---
+                preBoom(4.0, 0.3),
+                miniShake(),
+                preBoom(3.2, 0.25),
+                SKAction.wait(forDuration: 0.3),
+
+                preBoom(4.4, 0.25),
+                miniShake(),
+                preBoom(3.0, 0.2),
+                SKAction.wait(forDuration: 0.25),
+
+                preBoom(4.8, 0.2),
+                miniShake(), miniShake(),
+                preBoom(2.8, 0.18),
+                SKAction.wait(forDuration: 0.2),
+
+                // Sista stora BOOM innan kläckning
+                preBoom(5.2, 0.15),
+                miniShake(), miniShake(), miniShake(),
+                preBoom(2.5, 0.15),
+                SKAction.wait(forDuration: 0.15),
+
+                hatchShake,
+
+                // --- Vers 1: Långsam öppning, stor puls ---
+                SKAction.scale(to: 4.2, duration: 0.18),
+                SKAction.setTexture(egg2Tex, resize: false),
+                SKAction.scale(to: 3.0, duration: 0.15),
+                miniShake(),
+                SKAction.scale(to: 3.5, duration: 0.12),
+                SKAction.wait(forDuration: 0.6),
+
+                // --- Vers 2: Snabbare rytm, stängs-öppnas ---
+                SKAction.scale(to: 2.5, duration: 0.06),
+                SKAction.setTexture(egg1Tex, resize: false),
+                SKAction.scale(to: 3.8, duration: 0.08),
+                miniShake(),
+                SKAction.scale(to: 3.5, duration: 0.06),
+                SKAction.wait(forDuration: 0.1),
+
+                SKAction.scale(to: 2.8, duration: 0.05),
+                SKAction.setTexture(egg2Tex, resize: false),
+                SKAction.scale(to: 4.3, duration: 0.1),
+                SKAction.scale(to: 3.5, duration: 0.08),
+                SKAction.wait(forDuration: 0.15),
+
+                // --- Refräng: Snabb dubbelpuls + darr ---
+                SKAction.scale(to: 2.5, duration: 0.04),
+                SKAction.setTexture(egg1Tex, resize: false),
+                SKAction.scale(to: 4.0, duration: 0.06),
+                SKAction.scale(to: 3.0, duration: 0.04),
+                SKAction.scale(to: 4.2, duration: 0.06),
+                miniShake(),
+                SKAction.scale(to: 3.5, duration: 0.08),
+                SKAction.wait(forDuration: 0.08),
+
+                SKAction.scale(to: 2.8, duration: 0.04),
+                SKAction.setTexture(egg2Tex, resize: false),
+                SKAction.scale(to: 4.5, duration: 0.08),  // största!
+                miniShake(),
+                SKAction.scale(to: 2.5, duration: 0.06),
+                SKAction.scale(to: 3.8, duration: 0.08),
+                SKAction.scale(to: 3.5, duration: 0.06),
+                SKAction.wait(forDuration: 0.3),
+
+                // --- Brygga: Långsam, mjuk ---
+                SKAction.scale(to: 3.8, duration: 0.25),
+                SKAction.scale(to: 3.2, duration: 0.3),
+                SKAction.scale(to: 3.6, duration: 0.2),
+                SKAction.wait(forDuration: 0.2),
+
+                // --- Outro: Snabb staccato, stängs ---
+                SKAction.scale(to: 2.5, duration: 0.04),
+                SKAction.setTexture(egg1Tex, resize: false),
+                SKAction.scale(to: 3.9, duration: 0.06),
+                miniShake(),
+                SKAction.scale(to: 3.0, duration: 0.04),
+                SKAction.setTexture(egg2Tex, resize: false),
+                SKAction.scale(to: 4.0, duration: 0.06),
+                SKAction.scale(to: 3.2, duration: 0.04),
+                SKAction.setTexture(egg1Tex, resize: false),
+                SKAction.scale(to: 3.7, duration: 0.06),
+                miniShake(),
+                SKAction.scale(to: 3.5, duration: 0.1),
+                SKAction.wait(forDuration: 0.3),
+            ]
+        } else {
+            // Alternativ 2: Mäktig slow-motion puls med snabba inslag
+            func swell(_ s: CGFloat, _ d: TimeInterval) -> SKAction {
+                let a = SKAction.scale(to: s, duration: d)
+                a.timingMode = .easeInEaseOut
+                return a
+            }
+            func snap(_ s: CGFloat) -> SKAction { SKAction.scale(to: s, duration: 0.04) }
+            func softShake() -> SKAction {
+                SKAction.sequence([
+                    SKAction.moveBy(x: 3, y: -1, duration: 0.04),
+                    SKAction.moveBy(x: -5, y: 2, duration: 0.06),
+                    SKAction.moveBy(x: 4, y: -2, duration: 0.04),
+                    SKAction.moveBy(x: -2, y: 1, duration: 0.04),
+                ])
+            }
+
+            funSequence = [
+                SKAction.wait(forDuration: 0.3),
+
+                // --- Andning: långsam uppbyggnad ---
+                swell(4.2, 0.5),
+                swell(3.0, 0.4),
+                SKAction.wait(forDuration: 0.2),
+                swell(4.6, 0.6),
+                swell(2.8, 0.5),
+                SKAction.wait(forDuration: 0.25),
+
+                // --- Hjärtslag: djupa, mjuka pulser ---
+                swell(5.0, 0.4),
+                softShake(),
+                swell(2.5, 0.35),
+                SKAction.wait(forDuration: 0.3),
+                swell(5.3, 0.45),
+                softShake(),
+                swell(2.3, 0.35),
+                SKAction.wait(forDuration: 0.35),
+
+                // --- SNAP: plötsligt snabbt inslag ---
+                snap(5.8), softShake(),
+                swell(2.0, 0.5),
+                SKAction.wait(forDuration: 0.4),
+
+                // --- Stor våg: långsammast, mäktigast ---
+                swell(5.5, 0.7),
+                swell(2.5, 0.6),
+                swell(5.8, 0.8),
+                softShake(), softShake(),
+                swell(2.0, 0.7),
+                SKAction.wait(forDuration: 0.3),
+
+                // --- DUBBEL-SNAP: två snabba mitt i lugnet ---
+                snap(5.5), snap(2.5), snap(6.0),
+                softShake(),
+                swell(2.2, 0.6),
+                SKAction.wait(forDuration: 0.3),
+
+                // --- Utandning: mjuk landning ---
+                swell(4.0, 0.5),
+                swell(3.3, 0.4),
+                swell(3.7, 0.3),
+                swell(3.5, 0.25),
+                SKAction.wait(forDuration: 0.3),
+            ]
+        }
+
+        // Åk tillbaka till luckan
+        let returnPos = CGPoint(x: eggLuckaPos.x, y: eggLuckaPos.y + 220)
+        let returnToLucka = SKAction.move(to: returnPos, duration: 2.5)
+        returnToLucka.timingMode = .easeIn
+        let shrinkBack = SKAction.scale(to: 0.3, duration: 0.5)
+        shrinkBack.timingMode = .easeIn
+
+        let fullSequence: [SKAction] = [
+            SKAction.group([moveToCenter, growFull]),
+        ] + funSequence + [
+            // Lekfullt tillbaka — pulserande krympning, aldrig under 0.5
+            SKAction.group([
+                returnToLucka,
+                SKAction.rotate(toAngle: 0, duration: 0.5),
+                SKAction.sequence([
+                    SKAction.scale(to: 2.5, duration: 0.2),
+                    SKAction.scale(to: 1.5, duration: 0.18),
+                    SKAction.scale(to: 2.2, duration: 0.2),
+                    SKAction.scale(to: 1.2, duration: 0.18),
+                    SKAction.scale(to: 1.9, duration: 0.18),
+                    SKAction.scale(to: 1.0, duration: 0.16),
+                    SKAction.scale(to: 1.5, duration: 0.16),
+                    SKAction.scale(to: 0.8, duration: 0.15),
+                    SKAction.scale(to: 1.1, duration: 0.14),
+                    SKAction.scale(to: 0.7, duration: 0.14),
+                    SKAction.scale(to: 0.9, duration: 0.12),
+                    SKAction.scale(to: 0.6, duration: 0.12),
+                    SKAction.scale(to: 0.7, duration: 0.1),
+                    SKAction.scale(to: 0.5, duration: 0.1),
+                ]),
+            ]),
+            SKAction.fadeOut(withDuration: 0.2),
+            SKAction.run { [weak self] in
+                // Stäng luckan och fada tillbaka alla objekt
+                guard let self else { return }
+                guard let body = gokurContainer.childNode(withName: "gokurBody") as? SKSpriteNode else { return }
+                body.texture = SKTexture(imageNamed: "gokur_open")
+                // Fada tillbaka efter en stunds lugn
+                self.run(SKAction.sequence([
+                    SKAction.wait(forDuration: 1.5),
+                    SKAction.run {
+                        self.gokurActive = false
+                        self.transitionManager.deactivateAll()
+                        self.toolboxNode.fadeBack()
+                        self.owl.run(SKAction.sequence([
+                            SKAction.wait(forDuration: 0.8),
+                            SKAction.fadeIn(withDuration: 3.0),
+                            SKAction.run { [weak self] in
+                                self?.owl.startSleeping()
+                            }
+                        ]))
+                    }
+                ]))
+            },
+            SKAction.removeFromParent()
+        ]
+
+        egg.run(SKAction.sequence(fullSequence))
     }
 
     private func tapGokur() {
-        // TODO: Gökur-interaktion — jobbar vidare imorgon
+        guard let gokurContainer = childNode(withName: "gokur"),
+              let body = gokurContainer.childNode(withName: "gokurBody") as? SKSpriteNode else { return }
+
+        // Efter tittut — slumpa bara mellan ägg och stor lucka
+        let variant: Int
+        if gokurWaitingAfterTittut {
+            gokurWaitingAfterTittut = false
+            variant = Bool.random() ? 0 : 1  // ägg eller stor lucka
+        } else {
+            variant = Int.random(in: 0...2)
+        }
+        let openTex: SKTexture
+        switch variant {
+        case 0: openTex = SKTexture(imageNamed: "gokur_open_liten")   // lilla luckan
+        case 1: openTex = SKTexture(imageNamed: "gokur_open_stor")    // stora luckan
+        default: openTex = SKTexture(imageNamed: "gokur_closed")       // båda luckorna
+        }
+        let idleTex = SKTexture(imageNamed: "gokur_open")
+
+        body.removeAction(forKey: "gokurTap")
+
+        // Fada ut andra objekt (om inte redan utfadade)
+        if !gokurActive {
+            gokurActive = true
+            transitionManager.activateObject(id: .gokur)
+            toolboxNode.fadeAway()
+            owl.removeAllActions()
+            owl.run(SKAction.fadeOut(withDuration: 0.4), withKey: "gokurFade")
+        }
+
+        // Visa ägg vid lilla luckan
+        let showEgg = variant == 0
+        let bothDoors = variant == 2
+        let closedTex = SKTexture(imageNamed: "gokur_closed")  // båda öppna
+
+        if showEgg {
+            // Luckan förblir öppen tills ägget åker tillbaka
+            body.texture = openTex
+            showGokurEgg(in: gokurContainer)
+        } else if bothDoors {
+            // Tittut! Öppna och stäng luckorna lekfullt
+            body.run(SKAction.sequence([
+                // Första tittut — långsamt
+                SKAction.setTexture(closedTex, resize: false),
+                SKAction.wait(forDuration: 0.6),
+                SKAction.setTexture(idleTex, resize: false),
+                SKAction.wait(forDuration: 0.4),
+
+                // Andra — lite snabbare
+                SKAction.setTexture(closedTex, resize: false),
+                SKAction.wait(forDuration: 0.4),
+                SKAction.setTexture(idleTex, resize: false),
+                SKAction.wait(forDuration: 0.3),
+
+                // Tredje — snabbt
+                SKAction.setTexture(closedTex, resize: false),
+                SKAction.wait(forDuration: 0.2),
+                SKAction.setTexture(idleTex, resize: false),
+                SKAction.wait(forDuration: 0.15),
+
+                // Fjärde — blixtsnabbt
+                SKAction.setTexture(closedTex, resize: false),
+                SKAction.wait(forDuration: 0.1),
+                SKAction.setTexture(idleTex, resize: false),
+                SKAction.wait(forDuration: 0.1),
+
+                // Femte — blixtsnabbt
+                SKAction.setTexture(closedTex, resize: false),
+                SKAction.wait(forDuration: 0.08),
+                SKAction.setTexture(idleTex, resize: false),
+                SKAction.wait(forDuration: 0.08),
+
+                // Paus — håller öppet
+                SKAction.setTexture(closedTex, resize: false),
+                SKAction.wait(forDuration: 0.8),
+
+                // Sista stängning — väntar på nästa tap
+                SKAction.setTexture(idleTex, resize: false),
+
+                SKAction.run { [weak self] in
+                    self?.gokurWaitingAfterTittut = true
+                }
+            ]), withKey: "gokurTap")
+        } else {
+            // Stor lucka — enkel öppna-stäng
+            body.run(SKAction.sequence([
+                SKAction.setTexture(openTex, resize: false),
+                SKAction.wait(forDuration: 2.0),
+                SKAction.setTexture(idleTex, resize: false),
+                SKAction.run { [weak self] in
+                    self?.transitionManager.deactivateAll()
+                    self?.toolboxNode.fadeBack()
+                    self?.owl.run(SKAction.sequence([
+                        SKAction.wait(forDuration: 0.8),
+                        SKAction.fadeIn(withDuration: 3.0),
+                        SKAction.run { [weak self] in
+                            self?.owl.startSleeping()
+                        }
+                    ]))
+                }
+            ]), withKey: "gokurTap")
+        }
     }
 
     private func setupHall() {
@@ -116,6 +664,7 @@ class GameScene: SKScene {
 
         owl.onSleeping = { [weak self] in
             guard let self else { return }
+            guard !self.gokurActive else { return }  // Stör inte gökur-sekvensen
             self.sceneState = .sleeping
             self.transitionManager.deactivateAll()
             self.toolboxNode.fadeBack()
@@ -3599,8 +4148,14 @@ class GameScene: SKScene {
 
         switch sceneState {
         case .sleeping:
+            // Ägg tap — interagera med ägget
+            if eggWaitingForTap && tappedNodes.contains(where: { $0.name == "gokurEgg" }) {
+                tapEgg()
+                return
+            }
+
             // Gökur tap — öppna uret
-            if tappedNodes.contains(where: { $0.name == "gokur" }) {
+            if tappedNodes.contains(where: { $0.name == "gokur" || $0.parent?.name == "gokur" }) {
                 tapGokur()
                 return
             }

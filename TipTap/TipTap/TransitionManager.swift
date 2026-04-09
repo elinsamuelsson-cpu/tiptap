@@ -3,7 +3,7 @@ import SpriteKit
 class TransitionManager {
 
     enum ObjectID: CaseIterable {
-        case owl, hat, toolbox
+        case owl, hat, toolbox, gokur
     }
 
     private var objects: [ObjectID: SKNode] = [:]
@@ -35,8 +35,8 @@ class TransitionManager {
     func deactivateAll() {
         for (_, sprite) in objects {
             let restore = SKAction.sequence([
-                SKAction.wait(forDuration: 0.3),
-                SKAction.fadeAlpha(to: 1.0, duration: 0.6)
+                SKAction.wait(forDuration: 0.8),
+                SKAction.fadeAlpha(to: 1.0, duration: 3.0)
             ])
             restore.timingMode = .easeInEaseOut
             sprite.run(restore, withKey: "focus")
