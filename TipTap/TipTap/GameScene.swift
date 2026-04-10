@@ -2621,9 +2621,11 @@ class GameScene: SKScene {
                 self.deerGlow = deerGlow
 
                 // Maskros-fröställning vid hovarna
-                self.spawnMaskrosBoll(on: deer)
-                self.spawnExtraMaskrosBollar(on: deer)
-                self.spawnTeaserMaskrosor(on: deer)
+                // Maskrosor sparade till annat rum:
+                // self.spawnMaskrosBoll(on: deer)
+                // self.spawnExtraMaskrosBollar(on: deer)
+                // self.spawnTeaserMaskrosor(on: deer)
+                self.startHoofGlitter(on: deer)
             }
         ]))
     }
@@ -3281,6 +3283,604 @@ class GameScene: SKScene {
         }
     }
 
+    // MARK: - Hoof Disco Glitter
+
+    // Hovpositioner i deer-space (nedre änden av benen)
+    private let hoofPositions: [CGPoint] = [
+        CGPoint(x: -50, y: -690),   // bakre vänster övre
+        CGPoint(x: -650, y: -890),   // bakre vänster yttre
+        CGPoint(x: -505, y: -900),   // bakre vänster
+        CGPoint(x: -409, y: -870),   // bakre höger
+        CGPoint(x: 126, y: -910),    // främre vänster
+        CGPoint(x: 318, y: -880),    // främre höger
+        CGPoint(x: 326, y: -910),    // främre vänster yttre
+        CGPoint(x: 468, y: -880),    // främre höger yttre
+    ]
+
+    /// Mjukt glitter vid fyra hovar innan dansen — lockar barnet
+    private func startHoofGlitter(on deer: SKNode) {
+        for (i, pos) in hoofPositions.enumerated() {
+            let glitter = SKNode()
+            glitter.position = pos
+            glitter.zPosition = 3
+            glitter.name = "hoofGlitter\(i)"
+            deer.addChild(glitter)
+
+            let spawnAction = SKAction.run { [weak glitter] in
+                guard let glitter else { return }
+                Self.spawnDiscoParticle(in: glitter, spread: 200, life: 1.5...3.0, scale: 0.5...1.5)
+            }
+            glitter.run(SKAction.sequence([
+                SKAction.wait(forDuration: Double(i) * 0.3),
+                SKAction.repeatForever(SKAction.sequence([
+                    spawnAction,
+                    SKAction.wait(forDuration: 0.2, withRange: 0.15),
+                ]))
+            ]), withKey: "hoofGlitterLoop")
+        }
+    }
+
+    /// Explosiv disco-storm vid fyra hovar under dansen
+    private func startDanceGlitterStorm(on deer: SKNode) {
+        // Ta bort idle-glitter
+        for i in 0..<hoofPositions.count {
+            deer.childNode(withName: "hoofGlitter\(i)")?.removeAllActions()
+            deer.childNode(withName: "hoofGlitter\(i)")?.removeFromParent()
+        }
+
+        // Skapa storm-nod vid varje hov
+        for (i, pos) in hoofPositions.enumerated() {
+            let storm = SKNode()
+            storm.position = pos
+            storm.zPosition = 3
+            storm.name = "hoofStorm\(i)"
+            deer.addChild(storm)
+
+            let spawnBurst = SKAction.run { [weak storm] in
+                guard let storm else { return }
+                for _ in 0..<2 {
+                    Self.spawnDiscoParticle(in: storm, spread: 400, life: 0.6...1.5, scale: 0.8...2.5)
+                }
+            }
+
+            storm.run(SKAction.repeatForever(SKAction.sequence([
+                spawnBurst,
+                SKAction.wait(forDuration: 0.06, withRange: 0.04),
+            ])), withKey: "stormLoop")
+        }
+
+        // Kontinuerlig synkad burst-loop — anpassar sig till alla faser
+        let beat: TimeInterval = 0.22
+        let mBeat: TimeInterval = 0.35
+        let rb: TimeInterval = beat * 1.5  // riverdance beat
+
+        // Burst vid hovnedslag — vanlig + blinkande mix
+        func hoofHit(_ n: Int, _ s: CGFloat, _ sc: ClosedRange<CGFloat>) -> SKAction {
+            SKAction.run { [weak self] in self?.burstAtHooves(intensity: n, spread: s, scale: sc) }
+        }
+        func hoofBlink(_ n: Int, _ s: CGFloat, _ sc: ClosedRange<CGFloat>) -> SKAction {
+            SKAction.run { [weak self] in self?.blinkBurstAtHooves(intensity: n, spread: s, scale: sc) }
+        }
+
+        // Stepp-fas: vanliga + blinkande vid bigBounce
+        let steppBursts = SKAction.sequence([
+            SKAction.wait(forDuration: beat * 0.8), hoofHit(5, 400, 0.8...2.0),
+            SKAction.wait(forDuration: beat * 0.8), hoofHit(5, 400, 0.8...2.0),
+            SKAction.wait(forDuration: beat * 0.8), hoofHit(5, 400, 0.8...2.0), hoofBlink(2, 500, 1.0...2.5),
+            SKAction.wait(forDuration: beat * 0.8), hoofHit(5, 400, 0.8...2.0), hoofBlink(2, 500, 1.0...2.5),
+            SKAction.wait(forDuration: beat * 0.8), hoofHit(8, 600, 1.0...3.0), hoofBlink(4, 700, 1.5...3.0),
+            SKAction.wait(forDuration: beat * 0.8), hoofHit(8, 600, 1.0...3.0), hoofBlink(4, 700, 1.5...3.0),
+            SKAction.wait(forDuration: beat * 0.8), hoofHit(8, 600, 1.0...3.0), hoofBlink(5, 800, 1.5...3.5),
+            SKAction.wait(forDuration: beat * 0.8), hoofHit(10, 700, 1.5...3.5), hoofBlink(6, 900, 2.0...4.0),
+        ])
+
+        // Moonwalk: mjukare, varannan blinkande
+        let moonBursts = SKAction.repeat(SKAction.sequence([
+            SKAction.wait(forDuration: mBeat * 0.9), hoofHit(4, 350, 0.6...2.0),
+            SKAction.wait(forDuration: mBeat * 0.9), hoofHit(4, 350, 0.6...2.0), hoofBlink(2, 500, 1.0...2.5),
+        ]), count: 6)
+
+        // Riverdance: varje landning — dubbla + blinkande
+        let riverBursts = SKAction.repeat(SKAction.sequence([
+            SKAction.wait(forDuration: rb * 0.65),
+            hoofHit(7, 500, 1.0...2.5),
+            hoofBlink(4, 600, 1.5...3.0),
+            hoofHit(4, 300, 0.5...1.5),
+        ]), count: 8)
+
+        // Stegring: massiv blinkande explosion
+        let rearBursts = SKAction.sequence([
+            SKAction.wait(forDuration: beat * 6),
+            hoofHit(15, 900, 1.5...4.0),
+            hoofBlink(15, 1000, 2.0...4.5),
+            hoofHit(10, 700, 1.0...3.0),
+            hoofBlink(8, 800, 1.5...3.5),
+        ])
+
+        // Kör alla bursts i sekvens matchande dansens koreografi
+        // Ordning: intro(2s) → fas1 → fas2 → riverdance → stegring → outro
+        let moonFirst = true  // matchar inte exakt men ger bra synk oavsett
+        deer.run(SKAction.sequence([
+            SKAction.wait(forDuration: 2.0),  // intro
+            steppBursts,  // fas 1 eller moon
+            SKAction.wait(forDuration: 0.2),
+            moonBursts,   // fas 2 eller stepp
+            SKAction.wait(forDuration: 0.2),
+            riverBursts,  // riverdance
+            SKAction.wait(forDuration: 0.2),
+            rearBursts,   // stegring
+        ]), withKey: "hoofBurstSync")
+    }
+
+    /// Explosion vid alla fyra hovar
+    private func burstAtHooves(intensity: Int, spread: CGFloat, scale: ClosedRange<CGFloat>) {
+        guard let deer = deerNode else { return }
+        for i in 0..<hoofPositions.count {
+            if let storm = deer.childNode(withName: "hoofStorm\(i)") {
+                for _ in 0..<intensity {
+                    Self.spawnDiscoParticle(in: storm, spread: spread, life: 0.5...1.2, scale: scale)
+                }
+            }
+        }
+    }
+
+    private func stopDanceGlitterStorm() {
+        guard let deer = deerNode else { return }
+        deer.removeAction(forKey: "hoofBurstSync")
+
+        for i in 0..<hoofPositions.count {
+            guard let storm = deer.childNode(withName: "hoofStorm\(i)") else { continue }
+            storm.removeAction(forKey: "stormLoop")
+
+            // Avslutnande mjuka partiklar — stillsamma, spridda, långsamt utdöende
+            let fadeSpawn = SKAction.run { [weak storm] in
+                guard let storm else { return }
+                Self.spawnDiscoParticle(in: storm, spread: 1200, life: 2.5...4.5, scale: 0.3...1.0)
+            }
+            storm.run(SKAction.sequence([
+                // Glesa, stillsamma partiklar som sprids ut över rummet
+                SKAction.repeat(SKAction.sequence([
+                    fadeSpawn,
+                    SKAction.wait(forDuration: 0.3, withRange: 0.2),
+                ]), count: 8),
+                // Vänta tills alla dött ut
+                SKAction.wait(forDuration: 5.0),
+                SKAction.removeFromParent()
+            ]))
+        }
+    }
+
+    /// Blinkande burst vid alla hovar
+    private func blinkBurstAtHooves(intensity: Int, spread: CGFloat, scale: ClosedRange<CGFloat>) {
+        guard let deer = deerNode else { return }
+        for i in 0..<hoofPositions.count {
+            if let storm = deer.childNode(withName: "hoofStorm\(i)") {
+                for _ in 0..<intensity {
+                    Self.spawnBlinkingDiscoParticle(in: storm, spread: spread, life: 1.0...2.5, scale: scale)
+                }
+            }
+        }
+    }
+
+    /// Extra explosion vid stegring — blinkande partiklar + massiv front-explosion
+    private func burstHoofGlitter() {
+        guard let deer = deerNode else { return }
+        let beat: TimeInterval = 0.22
+
+        // Alla befintliga partiklar blinkar extra vid stegring
+        for i in 0..<hoofPositions.count {
+            deer.childNode(withName: "hoofStorm\(i)")?.enumerateChildNodes(withName: "*") { particle, _ in
+                let speed = TimeInterval.random(in: 0.03...0.08)
+                let blinkCount = Int.random(in: 5...10)
+                var actions: [SKAction] = []
+                for _ in 0..<blinkCount {
+                    actions.append(SKAction.fadeAlpha(to: CGFloat.random(in: 0.0...0.1), duration: speed))
+                    actions.append(SKAction.fadeAlpha(to: CGFloat.random(in: 0.6...1.0), duration: speed * CGFloat.random(in: 0.5...1.5)))
+                    if Bool.random() {
+                        actions.append(SKAction.wait(forDuration: TimeInterval.random(in: 0.01...0.08)))
+                    }
+                }
+                particle.run(SKAction.sequence(actions), withKey: "rearBlink")
+            }
+        }
+
+        // Extra intensiv blinkning vid de nedre hovarna (0-2)
+        for i in 0...2 {
+            deer.childNode(withName: "hoofStorm\(i)")?.enumerateChildNodes(withName: "*") { particle, _ in
+                let speed = TimeInterval.random(in: 0.02...0.05)
+                let extraCount = Int.random(in: 8...15)
+                var extra: [SKAction] = [SKAction.wait(forDuration: TimeInterval.random(in: 0...0.1))]
+                for _ in 0..<extraCount {
+                    extra.append(SKAction.fadeAlpha(to: 0, duration: speed))
+                    extra.append(SKAction.fadeAlpha(to: CGFloat.random(in: 0.7...1.0), duration: speed * 0.6))
+                    extra.append(SKAction.fadeAlpha(to: CGFloat.random(in: 0.0...0.05), duration: speed * 0.5))
+                    extra.append(SKAction.fadeAlpha(to: CGFloat.random(in: 0.8...1.0), duration: speed * 0.8))
+                }
+                particle.run(SKAction.sequence(extra), withKey: "rearExtraBlink")
+            }
+        }
+
+        // Lyft bara bakhovarnas storm-noder (0-2) uppåt med stegringen
+        for i in 0...2 {
+            if let storm = deer.childNode(withName: "hoofStorm\(i)") {
+                let liftUp = SKAction.moveBy(x: 0, y: 80, duration: beat * 1.5)
+                liftUp.timingMode = .easeOut
+                let holdUp = SKAction.wait(forDuration: beat * 4)
+                let comeDown = SKAction.moveBy(x: 0, y: -80, duration: beat)
+                comeDown.timingMode = .easeIn
+                storm.run(SKAction.sequence([liftUp, holdUp, comeDown]), withKey: "rearLift")
+            }
+        }
+
+        // Blinkande burst vid alla hovar
+        for i in 0..<hoofPositions.count {
+            if let storm = deer.childNode(withName: "hoofStorm\(i)") {
+                for _ in 0..<9 {
+                    Self.spawnBlinkingDiscoParticle(in: storm, spread: 1000, life: 1.5...3.0, scale: 1.5...4.0)
+                }
+            }
+        }
+
+        // Extra blinkande burst vid de främre hovarna
+        let frontHoofOffsets: [CGPoint] = [
+            CGPoint(x: hoofPositions[3].x + 1150, y: hoofPositions[3].y + 200),
+            CGPoint(x: hoofPositions[4].x + 1150, y: hoofPositions[4].y + 200),
+            CGPoint(x: hoofPositions[5].x + 1150, y: hoofPositions[5].y + 200),
+            CGPoint(x: hoofPositions[6].x + 1150, y: hoofPositions[6].y + 200),
+            CGPoint(x: hoofPositions[7].x + 1150, y: hoofPositions[7].y + 200),
+        ]
+        for pos in frontHoofOffsets {
+            let burst = SKNode()
+            burst.position = pos
+            burst.zPosition = 3
+            deer.addChild(burst)
+            for _ in 0..<9 {
+                Self.spawnBlinkingDiscoParticle(in: burst, spread: 800, life: 1.2...2.5, scale: 1.5...4.0)
+            }
+            burst.run(SKAction.sequence([
+                SKAction.wait(forDuration: 3.0),
+                SKAction.removeFromParent()
+            ]))
+        }
+
+        // Massiv front-explosion framför rådjuret som sprids i hela rummet
+        guard let deer = deerNode else { return }
+
+        // Mini sparkles framför hovarna
+        let miniSparklePositions = [
+            CGPoint(x: 500, y: -700),
+            CGPoint(x: 700, y: -650),
+        ]
+        for pos in miniSparklePositions {
+            let mini = SKNode()
+            mini.position = pos
+            mini.zPosition = 25
+            deer.addChild(mini)
+            for _ in 0..<5 {
+                Self.spawnBlinkingDiscoParticle(in: mini, spread: 400, life: 1.0...2.0, scale: 0.8...2.0)
+            }
+            mini.run(SKAction.sequence([
+                SKAction.wait(forDuration: 3.0),
+                SKAction.removeFromParent()
+            ]))
+        }
+
+        // 50% av befintliga partiklar snabbfadar ut när rådjuret landar
+        let fadeLanding = SKAction.sequence([
+            SKAction.wait(forDuration: beat * 5.5),
+            SKAction.run { [weak deer] in
+                guard let deer else { return }
+                for i in 0..<self.hoofPositions.count {
+                    deer.childNode(withName: "hoofStorm\(i)")?.enumerateChildNodes(withName: "*") { particle, _ in
+                        guard Bool.random() else { return }  // 50% chans
+                        let fadeDur = TimeInterval.random(in: 0.2...0.6)
+                        let driftX = CGFloat.random(in: -200...200)
+                        let driftY = CGFloat.random(in: 50...200)
+                        particle.run(SKAction.group([
+                            SKAction.fadeOut(withDuration: fadeDur),
+                            SKAction.moveBy(x: driftX, y: driftY, duration: fadeDur),
+                        ]))
+                    }
+                }
+            }
+        ])
+        deer.run(fadeLanding, withKey: "rearFadeLanding")
+
+        // Sparkle som dyker upp när rådjuret landar från stegringen
+        let landingSparkle = SKNode()
+        landingSparkle.position = CGPoint(x: 600, y: -950)
+        landingSparkle.zPosition = 25
+        deer.addChild(landingSparkle)
+        landingSparkle.run(SKAction.sequence([
+            SKAction.wait(forDuration: beat * 5.5),  // dyker upp på väg ner
+            SKAction.run {
+                for _ in 0..<12 {
+                    Self.spawnBlinkingDiscoParticle(in: landingSparkle, spread: 600, life: 1.0...2.5, scale: 1.0...3.0)
+                }
+            },
+            SKAction.wait(forDuration: 3.0),
+            SKAction.removeFromParent()
+        ]))
+
+        let frontBurst = SKNode()
+        frontBurst.position = CGPoint(x: 800, y: -400)  // framför rådjuret
+        frontBurst.zPosition = 25  // framför rådjuret
+        frontBurst.name = "frontBurst"
+        deer.addChild(frontBurst)
+
+        // Våg 1: Blinkande explosion uppåt och utåt
+        for _ in 0..<18 {
+            Self.spawnBlinkingDiscoParticle(in: frontBurst, spread: 1500, life: 1.5...3.0, scale: 2.0...5.0)
+        }
+
+        // Våg 2: Fördröjd blinkande efterchock
+        frontBurst.run(SKAction.sequence([
+            SKAction.wait(forDuration: 0.15),
+            SKAction.run {
+                for _ in 0..<15 {
+                    Self.spawnBlinkingDiscoParticle(in: frontBurst, spread: 2000, life: 2.0...4.0, scale: 1.5...4.0)
+                }
+            },
+            // Våg 3: Sista regnande blinkande glitter
+            SKAction.wait(forDuration: 0.3),
+            SKAction.run {
+                for _ in 0..<9 {
+                    Self.spawnBlinkingDiscoParticle(in: frontBurst, spread: 2500, life: 2.5...4.5, scale: 1.0...3.0)
+                }
+            },
+            // Rensa efter att partiklarna dött ut
+            SKAction.wait(forDuration: 5.0),
+            SKAction.removeFromParent()
+        ]))
+    }
+
+    /// Generisk disco-partikel (solkatt/glitter)
+    private static func spawnDiscoParticle(in container: SKNode, spread: CGFloat,
+                                            life lifeRange: ClosedRange<TimeInterval>,
+                                            scale scaleRange: ClosedRange<CGFloat>) {
+        let rawScale = CGFloat.random(in: scaleRange)
+        let isLarge = rawScale > 2.5
+        let particleScale = isLarge ? rawScale * 0.5 : rawScale * 0.7
+        let isStar = isLarge || Int.random(in: 0...2) == 0  // stora = alltid sparkle
+
+        let particle: SKShapeNode
+        if isLarge {
+            // Sparkle — 6-uddad stjärna med tunna strålar
+            let size = CGFloat.random(in: 10...22)
+            let path = CGMutablePath()
+            for j in 0..<12 {
+                let angle = CGFloat(j) * .pi / 6 - .pi / 2
+                let r: CGFloat = (j % 2 == 0) ? size : size * 0.12
+                let p = CGPoint(x: cos(angle) * r, y: sin(angle) * r)
+                if j == 0 { path.move(to: p) } else { path.addLine(to: p) }
+            }
+            path.closeSubpath()
+            particle = SKShapeNode(path: path)
+        } else if isStar {
+            // 4-uddad stjärna
+            let size = CGFloat.random(in: 6...16)
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: 0, y: size))
+            path.addLine(to: CGPoint(x: size * 0.2, y: size * 0.2))
+            path.addLine(to: CGPoint(x: size, y: 0))
+            path.addLine(to: CGPoint(x: size * 0.2, y: -size * 0.2))
+            path.addLine(to: CGPoint(x: 0, y: -size))
+            path.addLine(to: CGPoint(x: -size * 0.2, y: -size * 0.2))
+            path.addLine(to: CGPoint(x: -size, y: 0))
+            path.addLine(to: CGPoint(x: -size * 0.2, y: size * 0.2))
+            path.closeSubpath()
+            particle = SKShapeNode(path: path)
+        } else {
+            particle = SKShapeNode(circleOfRadius: CGFloat.random(in: 4...12))
+        }
+
+        if isLarge {
+            // Sparkles: ljusare, mer magiska färger
+            switch Int.random(in: 0...2) {
+            case 0: particle.fillColor = .white
+            case 1: particle.fillColor = SKColor(red: 1.0, green: 1.0, blue: 0.9, alpha: 1.0)
+            default: particle.fillColor = SKColor(red: 0.95, green: 0.98, blue: 1.0, alpha: 1.0)
+            }
+            particle.glowWidth = 6.0
+        } else {
+            switch Int.random(in: 0...3) {
+            case 0: particle.fillColor = SKColor(red: 1.0, green: 0.95, blue: 0.6, alpha: 1.0)
+            case 1: particle.fillColor = .white
+            case 2: particle.fillColor = SKColor(red: 1.0, green: 0.85, blue: 0.4, alpha: 1.0)
+            default: particle.fillColor = SKColor(red: 0.95, green: 1.0, blue: 0.85, alpha: 1.0)
+            }
+            particle.glowWidth = isStar ? 4.0 : 2.0
+        }
+        particle.strokeColor = .clear
+        particle.blendMode = .add
+
+        // Startposition — spritt runt hovarna
+        let startAngle = CGFloat.random(in: 0...(.pi * 2))
+        let startRadius = CGFloat.random(in: 20...spread * 0.4)
+        particle.position = CGPoint(x: cos(startAngle) * startRadius, y: sin(startAngle) * startRadius)
+        particle.alpha = 0
+        particle.setScale(particleScale)
+        container.addChild(particle)
+
+        // Virvlar utåt i en båge
+        let life = TimeInterval.random(in: lifeRange)
+        let endAngle = startAngle + CGFloat.random(in: 0.8...2.5) * (Bool.random() ? 1 : -1)
+        let endRadius = CGFloat.random(in: spread * 0.3...spread)
+        let endPos = CGPoint(x: cos(endAngle) * endRadius, y: sin(endAngle) * endRadius)
+        let peakAlpha = CGFloat.random(in: 0.4...0.9)
+
+        particle.run(SKAction.sequence([
+            SKAction.fadeAlpha(to: peakAlpha, duration: life * 0.15),
+            SKAction.group([
+                SKAction.move(to: endPos, duration: life * 0.7),
+                SKAction.rotate(byAngle: CGFloat.random(in: 2...6), duration: life * 0.7),
+                SKAction.scale(to: CGFloat.random(in: 0.3...1.5), duration: life * 0.7),
+            ]),
+            SKAction.fadeOut(withDuration: life * 0.15),
+            SKAction.removeFromParent()
+        ]))
+    }
+
+    /// Blinkande disco-partikel — dubbelblinksar innan den fadar ut i rummet
+    private static func spawnBlinkingDiscoParticle(in container: SKNode, spread: CGFloat,
+                                                     life lifeRange: ClosedRange<TimeInterval>,
+                                                     scale scaleRange: ClosedRange<CGFloat>) {
+        let rawScale = CGFloat.random(in: scaleRange)
+        let isLarge = rawScale > 2.5
+        let particleScale = isLarge ? rawScale * 0.5 : rawScale * 0.7
+        let isStar = isLarge || Int.random(in: 0...2) == 0
+
+        let particle: SKShapeNode
+        if isLarge {
+            let size = CGFloat.random(in: 10...22)
+            let path = CGMutablePath()
+            for j in 0..<12 {
+                let angle = CGFloat(j) * .pi / 6 - .pi / 2
+                let r: CGFloat = (j % 2 == 0) ? size : size * 0.12
+                let p = CGPoint(x: cos(angle) * r, y: sin(angle) * r)
+                if j == 0 { path.move(to: p) } else { path.addLine(to: p) }
+            }
+            path.closeSubpath()
+            particle = SKShapeNode(path: path)
+            particle.fillColor = .white
+            particle.glowWidth = 6.0
+        } else if isStar {
+            let size = CGFloat.random(in: 6...16)
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: 0, y: size))
+            path.addLine(to: CGPoint(x: size * 0.2, y: size * 0.2))
+            path.addLine(to: CGPoint(x: size, y: 0))
+            path.addLine(to: CGPoint(x: size * 0.2, y: -size * 0.2))
+            path.addLine(to: CGPoint(x: 0, y: -size))
+            path.addLine(to: CGPoint(x: -size * 0.2, y: -size * 0.2))
+            path.addLine(to: CGPoint(x: -size, y: 0))
+            path.addLine(to: CGPoint(x: -size * 0.2, y: size * 0.2))
+            path.closeSubpath()
+            particle = SKShapeNode(path: path)
+            particle.fillColor = SKColor(red: 1.0, green: 0.95, blue: 0.6, alpha: 1.0)
+            particle.glowWidth = 4.0
+        } else {
+            particle = SKShapeNode(circleOfRadius: CGFloat.random(in: 4...12))
+            particle.fillColor = SKColor(red: 1.0, green: 0.85, blue: 0.4, alpha: 1.0)
+            particle.glowWidth = 2.0
+        }
+        particle.strokeColor = .clear
+        particle.blendMode = .add
+
+        let startAngle = CGFloat.random(in: 0...(.pi * 2))
+        let startRadius = CGFloat.random(in: 20...spread * 0.3)
+        particle.position = CGPoint(x: cos(startAngle) * startRadius, y: sin(startAngle) * startRadius)
+        particle.alpha = 0
+        particle.setScale(particleScale)
+        container.addChild(particle)
+
+        let life = TimeInterval.random(in: lifeRange)
+        let endAngle = startAngle + CGFloat.random(in: 0.8...2.5) * (Bool.random() ? 1 : -1)
+        let endRadius = CGFloat.random(in: spread * 0.4...spread)
+        let endPos = CGPoint(x: cos(endAngle) * endRadius, y: sin(endAngle) * endRadius)
+        let peakAlpha = CGFloat.random(in: 0.5...1.0)
+
+        // Magiska blinkar — slumpmässigt antal och rytm
+        let blinkCount = Int.random(in: 4...8)
+        var blinkActions: [SKAction] = []
+        for _ in 0..<blinkCount {
+            let speed = TimeInterval.random(in: 0.04...0.12)
+            let dimTo = peakAlpha * CGFloat.random(in: 0.0...0.15)
+            blinkActions.append(SKAction.fadeAlpha(to: dimTo, duration: speed))
+            blinkActions.append(SKAction.fadeAlpha(to: peakAlpha, duration: speed * CGFloat.random(in: 0.6...1.2)))
+            // Slumpmässig paus — ibland snabbt, ibland med andrum
+            if Bool.random() {
+                blinkActions.append(SKAction.wait(forDuration: TimeInterval.random(in: 0.02...0.15)))
+            }
+        }
+        let blinks = SKAction.sequence(blinkActions)
+
+        // Fortsätt blinka under resan också
+        let travelBlinkCount = Int.random(in: 2...5)
+        var travelBlinks: [SKAction] = []
+        for _ in 0..<travelBlinkCount {
+            let speed = TimeInterval.random(in: 0.05...0.15)
+            travelBlinks.append(SKAction.wait(forDuration: TimeInterval.random(in: 0.1...0.3)))
+            travelBlinks.append(SKAction.fadeAlpha(to: peakAlpha * CGFloat.random(in: 0.0...0.1), duration: speed))
+            travelBlinks.append(SKAction.fadeAlpha(to: peakAlpha * CGFloat.random(in: 0.5...1.0), duration: speed))
+        }
+
+        particle.run(SKAction.sequence([
+            SKAction.fadeAlpha(to: peakAlpha, duration: life * 0.08),
+            blinks,
+            SKAction.group([
+                SKAction.move(to: endPos, duration: life * 0.6),
+                SKAction.rotate(byAngle: CGFloat.random(in: 2...6), duration: life * 0.6),
+                SKAction.scale(to: CGFloat.random(in: 0.2...1.0), duration: life * 0.6),
+                SKAction.sequence(travelBlinks),
+            ]),
+            SKAction.fadeOut(withDuration: life * 0.2),
+            SKAction.removeFromParent()
+        ]))
+    }
+
+    /// Blinkning synkad med stepp-fasens hovnedslag
+    private func steppGlitterBlink() {
+        guard let deer = deerNode else { return }
+        let beat: TimeInterval = 0.22
+
+        // Blink vid varje bounce-landning: 4 vanliga + 4 stora
+        var blinkActions: [SKAction] = []
+        for i in 0..<8 {
+            let isLarge = i >= 4
+            blinkActions.append(SKAction.wait(forDuration: beat * 0.75))
+            blinkActions.append(SKAction.run { [weak deer, weak self] in
+                guard let deer, let self else { return }
+                for j in 0..<self.hoofPositions.count {
+                    deer.childNode(withName: "hoofStorm\(j)")?.enumerateChildNodes(withName: "*") { particle, _ in
+                        // Fler blinkar vid bigBounce
+                        let chance: Int = isLarge ? 80 : 50
+                        guard Int.random(in: 0..<100) < chance else { return }
+                        let speed = TimeInterval.random(in: 0.03...0.06)
+                        let dim = CGFloat.random(in: 0.0...0.1)
+                        let bright = CGFloat.random(in: isLarge ? 0.8...1.0 : 0.6...1.0)
+                        particle.run(SKAction.sequence([
+                            SKAction.fadeAlpha(to: dim, duration: speed),
+                            SKAction.fadeAlpha(to: bright, duration: speed * 0.7),
+                            isLarge ? SKAction.sequence([
+                                SKAction.fadeAlpha(to: dim, duration: speed * 0.5),
+                                SKAction.fadeAlpha(to: bright, duration: speed * 0.6),
+                            ]) : SKAction.wait(forDuration: 0),
+                        ]), withKey: "steppBlink")
+                    }
+                }
+            })
+        }
+
+        deer.run(SKAction.sequence(blinkActions), withKey: "steppGlitterBlink")
+    }
+
+    /// Extra blinkning på alla solkatter under moonwalk — mjukare rytm
+    private func moonwalkGlitterBlink() {
+        guard let deer = deerNode else { return }
+        let mBeat: TimeInterval = 0.35
+
+        // Pulserande blink i moonwalk-rytm — var mBeat
+        let moonBlinkLoop = SKAction.repeat(SKAction.sequence([
+            SKAction.wait(forDuration: mBeat * 0.7),
+            SKAction.run { [weak deer] in
+                guard let deer else { return }
+                for i in 0..<self.hoofPositions.count {
+                    deer.childNode(withName: "hoofStorm\(i)")?.enumerateChildNodes(withName: "*") { particle, _ in
+                        guard Bool.random() else { return }  // ~50% blinkar varje gång
+                        let speed = TimeInterval.random(in: 0.04...0.08)
+                        particle.run(SKAction.sequence([
+                            SKAction.fadeAlpha(to: CGFloat.random(in: 0.0...0.1), duration: speed),
+                            SKAction.fadeAlpha(to: CGFloat.random(in: 0.6...1.0), duration: speed * 0.8),
+                        ]), withKey: "moonBlink")
+                    }
+                }
+            }
+        ]), count: 12)
+
+        deer.run(moonBlinkLoop, withKey: "moonGlitterBlink")
+    }
+
     // MARK: - Deer Dance
 
     /// Hjälpfunktion: återställ alla delar till neutralposition
@@ -3358,12 +3958,20 @@ class GameScene: SKScene {
 
         isDeerDancing = true
 
-        // Stoppa teaser-maskrosor och blås bort maskrosbollen
-        deer.removeAction(forKey: "teaserMaskros")
-        blowAwayMaskros()
+        // Göm alla andra objekt under dansen
+        hatNode.run(SKAction.fadeOut(withDuration: 0.4))
+        toolboxNode.fadeAway()
+        if let gokur = childNode(withName: "gokur") {
+            gokur.run(SKAction.fadeOut(withDuration: 0.4))
+        }
 
-        // Kontinuerlig maskros-storm under hela dansen
-        startMaskrosStorm(on: deer)
+        // Maskrosor sparade till annat rum:
+        // deer.removeAction(forKey: "teaserMaskros")
+        // blowAwayMaskros()
+        // startMaskrosStorm(on: deer)
+
+        // Disco-glitter exploderar vid hovarna under dansen
+        startDanceGlitterStorm(on: deer)
 
         // Stoppa idle-animationer och glow
         deer.removeAction(forKey: "deerBreathe")
@@ -4249,7 +4857,7 @@ class GameScene: SKScene {
             // Fas 1 — försiktig andning
             SKAction.run { startDanceBreath(bodyScale: 0.008, headBob: 1.5, speed: 0.45) },
             SKAction.run { phase1() },
-            SKAction.run { [weak self] in if moonFirst { self?.moonwalkMaskrosor(duration: moonDur) } },
+            SKAction.run { [weak self] in if moonFirst { self?.moonwalkGlitterBlink() } else { self?.steppGlitterBlink() } },
             SKAction.wait(forDuration: phase1Dur + 0.05),
             SKAction.run { [weak self] in stopPhaseActions(); self?.resetDeerParts() },
             SKAction.wait(forDuration: 0.15),
@@ -4257,7 +4865,7 @@ class GameScene: SKScene {
             // Fas 2 — lite mer andning
             SKAction.run { startDanceBreath(bodyScale: 0.012, headBob: 2.0, speed: 0.40) },
             SKAction.run { phase2() },
-            SKAction.run { [weak self] in if !moonFirst { self?.moonwalkMaskrosor(duration: moonDur) } },
+            SKAction.run { [weak self] in if !moonFirst { self?.moonwalkGlitterBlink() } else { self?.steppGlitterBlink() } },
             SKAction.wait(forDuration: phase2Dur + 0.05),
             SKAction.run { [weak self] in stopPhaseActions(); self?.resetDeerParts() },
             SKAction.wait(forDuration: 0.15),
@@ -4272,7 +4880,8 @@ class GameScene: SKScene {
             // Fas R: Stegring — tydlig andning
             SKAction.run { startDanceBreath(bodyScale: 0.022, headBob: 4.0, speed: 0.32) },
             SKAction.run { startRearingPhase() },
-            SKAction.run { [weak self] in self?.spinAllMaskrosor() },
+            // SKAction.run { [weak self] in self?.spinAllMaskrosor() },
+            SKAction.run { [weak self] in self?.burstHoofGlitter() },
             SKAction.wait(forDuration: rearDur + 0.05),
             SKAction.run { [weak self] in stopPhaseActions(); self?.resetDeerParts() },
             SKAction.wait(forDuration: 0.15),
@@ -4318,7 +4927,9 @@ class GameScene: SKScene {
                 self.resetDeerParts()
                 self.isDeerDancing = false
                 self.isDeerPostDance = true
-                self.stopMaskrosStorm()
+                // self.stopMaskrosStorm()
+                self.stopDanceGlitterStorm()
+                self.startHoofGlitter(on: deer)
 
                 // Andning — kroppen
                 let breatheUp = SKAction.scale(to: baseScale * 1.015, duration: 1.4)
@@ -4418,8 +5029,11 @@ class GameScene: SKScene {
                 // Fada in toolbox + starta idle
                 self.toolboxNode.fadeBack()
 
-                // Återställ transition manager
+                // Återställ transition manager + gökur
                 self.transitionManager.deactivateAll()
+                if let gokur = self.childNode(withName: "gokur") {
+                    gokur.run(SKAction.fadeAlpha(to: 1.0, duration: 0.6))
+                }
 
                 // Tavlan: starta glow
                 if self.portraitStep == 3 { self.startPortraitGlow() }
